@@ -45,7 +45,22 @@
 
       <!-- Spotify Music Interface -->
       <div id="tab-music" class="gtag-hidden">
-        <button id="spotify-login-btn" class="gtag-btn" onclick="loginWithSpotify()">CONNECT SPOTIFY PREMIUM</button>
+        <!-- Built-in Spotify Player (Works immediately with no API key) -->
+        <iframe id="spotify-embed" style="border-radius:6px; border:2px solid #33ff33; margin-bottom:10px;" 
+          src="https://spotify.com" 
+          width="100%" height="152" frameBorder="0" allowfullscreen="" 
+          allow="autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture" loading="lazy">
+        </iframe>
+
+        <!-- Paste any Spotify Song/Playlist Link -->
+        <div class="gtag-input-row" style="margin-bottom:12px;">
+          <span>&gt;</span>
+          <input type="text" id="spotify-link-input" placeholder="PASTE SPOTIFY LINK..." autocomplete="off" />
+          <button class="gtag-btn" onclick="loadCustomSpotifyLink()">LOAD</button>
+        </div>
+
+        <!-- Optional Spotify Premium Full-Track SDK Controls -->
+        <button id="spotify-login-btn" class="gtag-btn" onclick="loginWithSpotify()">CONNECT SPOTIFY PREMIUM SDK</button>
         <div id="spotify-controls" class="gtag-hidden">
           <div id="track-info">READY - SELECT "GORILLA TAG WEB" IN SPOTIFY</div>
           <div class="gtag-btn-group">
@@ -60,6 +75,7 @@
 
   <!-- External & Modular Scripts -->
   <script src="https://scdn.co"></script>
+  <script src="https://unpkg.com"></script>
   <script src="ui-keybinds.js"></script>
   <script src="spotify.js"></script>
   <script type="module" src="chat.js"></script>
