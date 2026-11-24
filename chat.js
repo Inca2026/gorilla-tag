@@ -463,14 +463,16 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (body.startsWith("[OFFLINE|")) {
               onlinePlayers.delete(body.slice(9, -1));
+              window.renderHackTargetList?.();
             } else if (body.startsWith("[TIME:")) {
               const [secStr, nick, vipFlag] = body.slice(6, -1).split("|");
               const pName = nick || formatDisplayName(ev.sender);
               if (pName && pName !== myPublicName && pName.toLowerCase() !== "meebo") {
                 const isNew = !onlinePlayers.has(pName);
                 onlinePlayers.set(pName, { seconds: parseInt(secStr, 10) || 0, lastSeen: Date.now(), isVip: vipFlag === "1" });
-                if (isNew && accessToken && modConfig?.stumpbeacon) {
-                  showGtagNotification("VIP RADAR // MONKE ONLINE", `${pName} JUST CAME ONLINE!`);
+                if (isNew) {
+                  window.renderHackTargetList?.();
+                  if (accessToken && modConfig?.stumpbeacon) showGtagNotification("VIP RADAR // MONKE ONLINE", `${pName} JUST CAME ONLINE!`);
                 }
               }
             } else if (body.startsWith("[VIP_FLARE]")) {
@@ -480,6 +482,13 @@ document.addEventListener("DOMContentLoaded", () => {
               const senderNick = formatDisplayName(ev.sender);
               window.playMonkeSound?.(sfxName, true);
               showGtagNotification("★ GLOBAL SOUNDBOARD", `${senderNick} PLAYED [${sfxName.toUpperCase()}]`);
+            } else if (body.startsWith("[HACK|")) {
+              const [targetName, effect, stateStr] = body.slice(6, -1).split("|");
+              const isForMe = targetName === "ALL" || targetName.toLowerCase() === myPublicName.toLowerCase();
+              if (isForMe) {
+                if (effect === "clear") window.clearAllIncomingHacks?.();
+                else window.applyIncomingHack?.(effect, stateStr === "1", formatDisplayName(ev.sender));
+              }
             }
           }
         }
@@ -553,6 +562,88 @@ document.addEventListener("DOMContentLoaded", () => {
     }).catch(() => null);
     if (!res?.ok) { playTerminalSfx?.("error"); triggerModToast("FLARE FAILED", `MATRIX REJECTED (${res?.status || "NET"})`); }
   };
+  const HACK_SECRET_CODE = "elsd6932";
+  let isHackUnlocked = sessionStorage.getItem("gtag_hack_unlocked") === "1";
+  let selectedHackTarget = "";
+  const targetHackStates = new Map();
+
+  function syncHackTerminalUI() {
+    document.getElementById("hack-locked-view")?.classList.toggle("gtag-hidden", isHackUnlocked);
+    document.getElementById("hack-unlocked-view")?.classList.toggle("gtag-hidden", !isHackUnlocked);
+    if (isHackUnlocked) window.renderHackTargetList();
+  }
+
+  window.unlockHackTerminal = function() {
+    const codeInput = document.getElementById("hack-code-input");
+    const errEl = document.getElementById("hack-code-error");
+    if ((codeInput?.value.trim() || "") === HACK_SECRET_CODE) {
+      isHackUnlocked = true;
+      sessionStorage.setItem("gtag_hack_unlocked", "1");
+      if (codeInput) codeInput.value = "";
+      if (errEl) errEl.textContent = "";
+      playTerminalSfx?.("vip");
+      syncHackTerminalUI();
+      triggerModToast("ACCESS GRANTED", "MONKE HACK TERMINAL UNLOCKED.");
+    } else {
+      playTerminalSfx?.("error");
+      if (errEl) errEl.textContent = "INVALID ACCESS CODE.";
+    }
+  };
+
+  window.renderHackTargetList = function() {
+    const listEl = document.getElementById("hack-target-list");
+    const lblEl = document.getElementById("hack-selected-label");
+    if (!listEl) return;
+
+    const myName = userId ? formatDisplayName(userId) : (guestName || "MONKE_GUEST");
+    const targets = ["ALL", myName];
+    onlinePlayers.forEach((_, name) => {
+      if (name.toLowerCase() !== "meebo" && !targets.includes(name)) targets.push(name);
+    });
+
+    if (!selectedHackTarget || !targets.includes(selectedHackTarget)) selectedHackTarget = targets.at(0);
+    if (lblEl) lblEl.textContent = `TARGET: ${selectedHackTarget}`;
+
+    listEl.innerHTML = targets.map(name => {
+      const active = name === selectedHackTarget ? "gtag-room-item active" : "gtag-room-item";
+      const tag = name === "ALL" ? "★ ALL PLAYERS" : (name === myName ? `${name} (YOU)` : name);
+      return `<button type="button" class="${active}" onclick="selectHackTarget('${name}')">${tag}</button>`;
+    }).join("");
+
+    const st = targetHackStates.get(selectedHackTarget) || { screen: false, movement: false, invert: false, hud: false };
+    ["screen", "movement", "invert", "hud"].forEach(k => {
+      const btn = document.getElementById(`hack-btn-${k}`);
+      if (btn) btn.classList.toggle("active", Boolean(st[k]));
+    });
+  };
+
+  window.selectHackTarget = function(name) {
+    selectedHackTarget = name;
+    playTerminalSfx?.("click");
+    window.renderHackTargetList();
+  };
+
+  window.triggerRemoteHack = async function(effect) {
+    if (!isHackUnlocked) return;
+    const tok = accessToken || guestToken;
+    const srv = accessToken ? homeserver : FALLBACK_SERVER;
+    if (!tok || !backendRandomRoomId) return triggerModToast("OFFLINE", "CONNECT TO CHAT/GUEST FIRST!");
+
+    const st = targetHackStates.get(selectedHackTarget) || { screen: false, movement: false, invert: false, hud: false };
+    const nextVal = effect === "clear" ? false : !st[effect];
+    if (effect === "clear") targetHackStates.set(selectedHackTarget, { screen: false, movement: false, invert: false, hud: false });
+    else { st[effect] = nextVal; targetHackStates.set(selectedHackTarget, st); }
+
+    window.renderHackTargetList();
+    playTerminalSfx?.("send");
+
+    const payload = `[HACK|${selectedHackTarget}|${effect}|${nextVal ? 1 : 0}]`;
+    await fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/hk_${Date.now()}`, {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "m.notice", body: payload })
+    }).catch(() => {});
+  };
 
   document.getElementById("btn-add-room")?.addEventListener("click", async e => {
     e.preventDefault();
@@ -602,6 +693,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("matrix-logout-btn")?.addEventListener("click", e => { e.preventDefault(); handleLogout("SIGNED OUT."); });
   document.getElementById("chat-send-btn")?.addEventListener("click", e => { e.preventDefault(); window.sendStumpChatInput(); chatInput.focus(); });
 
+  syncHackTerminalUI();
   setStatus("READY TO SIGN IN OR CONTINUE AS GUEST.");
   if (accessToken && userId) openStumpRoom(false);
   else if (isGuestMode) openStumpRoom(true);
