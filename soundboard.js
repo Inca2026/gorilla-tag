@@ -213,6 +213,29 @@ window.resetAllMods = function() {
   triggerModToast("MODS RESET", "ALL MODS & SLIDERS RESTORED TO DEFAULT.");
 };
 
+window.clearUnityCosmetics = function() {
+  Object.keys(localStorage).forEach(key => {
+    if (!key.startsWith("gtag_")) {
+      localStorage.removeItem(key);
+    }
+  });
+
+  if (window.indexedDB && indexedDB.databases) {
+    indexedDB.databases().then(dbs => {
+      dbs.forEach(db => {
+        if (db.name && db.name.includes("idbfs")) {
+          indexedDB.deleteDatabase(db.name);
+        }
+      });
+    });
+  } else {
+    indexedDB.deleteDatabase("/idbfs");
+  }
+
+  triggerModToast("COSMETICS WIPED", "RELOADING GAME...");
+  setTimeout(() => window.location.reload(), 1200);
+};
+
 document.addEventListener("DOMContentLoaded", () => {
   const saved = localStorage.getItem("gtag_saved_mods");
   if (saved) {
