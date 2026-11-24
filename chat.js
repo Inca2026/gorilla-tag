@@ -68,7 +68,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const entries = [{ name: myName, seconds: totalPlaySeconds, isSelf: true, isVip: Boolean(userId) }];
 
     onlinePlayers.forEach((info, name) => {
-      if (name === myName || name.toLowerCase() === "meebo" || now - info.lastSeen > 60000) return;
+      if (name === myName || name.toLowerCase() === "meebo" || now - info.lastSeen > 25000) return;
       entries.push({
         name,
         seconds: info.seconds + Math.floor((now - info.lastSeen) / 1000),
@@ -216,6 +216,23 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (_) {}
   }
 
+  function sendOfflineBeacon() {
+    const tok = accessToken || guestToken;
+    const srv = accessToken ? homeserver : FALLBACK_SERVER;
+    const myPublicName = userId ? formatDisplayName(userId) : guestName;
+    if (!tok || !backendRandomRoomId || !myPublicName) return;
+
+    const txnId = `bye_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/${txnId}`, {
+      method: "PUT",
+      keepalive: true,
+      headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "m.notice", body: `[OFFLINE|${myPublicName}]` })
+    }).catch(() => {});
+  }
+
+  window.addEventListener("pagehide", sendOfflineBeacon);
+  window.addEventListener("beforeunload", sendOfflineBeacon);
   setInterval(sendSilentPresence, 15000);
   function setStatus(msg, isError = false) {
     if (!statusLabel) return;
@@ -273,7 +290,10 @@ document.addEventListener("DOMContentLoaded", () => {
       const loginData = await loginRes.json();
       if (!loginRes.ok || !loginData.access_token) throw new Error(loginData.error || `Login rejected (${loginRes.status})`);
 
-      if (guestName) onlinePlayers.delete(guestName);
+      if (guestName) {
+        sendOfflineBeacon();
+        onlinePlayers.delete(guestName);
+      }
       guestName = ""; guestToken = ""; guestBotId = ""; isGuestMode = false;
       ["gtag_guest_nick", "gtag_guest_token", "gtag_guest_bot_id", "gtag_guest_active"].forEach(k => sessionStorage.removeItem(k));
 
@@ -417,21 +437,24 @@ document.addEventListener("DOMContentLoaded", () => {
         const joinedRooms = data.rooms?.join || {};
         if (backendRandomRoomId && joinedRooms[backendRandomRoomId]) {
           for (const ev of (joinedRooms[backendRandomRoomId].timeline?.events || [])) {
-            if (ev.type === "m.room.message" && ev.content?.body) {
-              const body = ev.content.body;
-              if (body.startsWith("[TIME:")) {
-                const [secStr, nick, vipFlag] = body.slice(6, -1).split("|");
-                const pName = nick || formatDisplayName(ev.sender);
-                if (pName && pName !== myPublicName && pName.toLowerCase() !== "meebo") {
-                  const isNew = !onlinePlayers.has(pName);
-                  onlinePlayers.set(pName, { seconds: parseInt(secStr, 10) || 0, lastSeen: Date.now(), isVip: vipFlag === "1" });
-                  if (isNew && !isInitialSync && accessToken && modConfig?.stumpbeacon) {
-                    showGtagNotification("VIP RADAR // MONKE ONLINE", `${pName} JUST CAME ONLINE!`);
-                  }
+            // Skip historical events from before this session loaded so closed tabs never appear
+            if (isInitialSync || !ev.content?.body) continue;
+            const body = ev.content.body;
+
+            if (body.startsWith("[OFFLINE|")) {
+              onlinePlayers.delete(body.slice(9, -1));
+            } else if (body.startsWith("[TIME:")) {
+              const [secStr, nick, vipFlag] = body.slice(6, -1).split("|");
+              const pName = nick || formatDisplayName(ev.sender);
+              if (pName && pName !== myPublicName && pName.toLowerCase() !== "meebo") {
+                const isNew = !onlinePlayers.has(pName);
+                onlinePlayers.set(pName, { seconds: parseInt(secStr, 10) || 0, lastSeen: Date.now(), isVip: vipFlag === "1" });
+                if (isNew && accessToken && modConfig?.stumpbeacon) {
+                  showGtagNotification("VIP RADAR // MONKE ONLINE", `${pName} JUST CAME ONLINE!`);
                 }
-              } else if (body.startsWith("[VIP_FLARE]") && !isInitialSync) {
-                showVipFlareBanner(formatDisplayName(ev.sender), body.slice(11));
               }
+            } else if (body.startsWith("[VIP_FLARE]")) {
+              showVipFlareBanner(formatDisplayName(ev.sender), body.slice(11));
             }
           }
         }
@@ -512,6 +535,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   function handleLogout() {
+    sendOfflineBeacon();
     accessToken = ""; userId = ""; syncToken = ""; isSyncing = false; isGuestMode = false; guestName = ""; window.isMatrixConnected = false;
     ["gtag_mx_token", "gtag_mx_user", "gtag_mx_server", "gtag_mx_custom_room"].forEach(k => localStorage.removeItem(k));
     ["gtag_guest_nick", "gtag_guest_active"].forEach(k => sessionStorage.removeItem(k));
