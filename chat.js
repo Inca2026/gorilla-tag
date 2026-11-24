@@ -282,6 +282,14 @@ document.addEventListener("DOMContentLoaded", () => {
   window.loginElementAccount = handleLogin;
   window.logoutElementAccount = handleLogout;
 
+  window.sendStumpChatInput = function() {
+    const msg = chatInput.value.trim();
+    if (msg) {
+      chatInput.value = "";
+      sendMessage(msg);
+    }
+  };
+
   loginBtn.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -297,23 +305,15 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  window.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      if (document.activeElement === chatInput) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        const msg = chatInput.value.trim();
-        if (msg) {
-          chatInput.value = "";
-          sendMessage(msg);
-        }
-      } else if (document.activeElement === passField || document.activeElement === userField) {
-        e.preventDefault();
-        e.stopImmediatePropagation();
-        handleLogin();
-      }
-    }
-  }, true);
+  const sendBtn = document.getElementById("chat-send-btn");
+  if (sendBtn) {
+    sendBtn.onclick = (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      window.sendStumpChatInput();
+      chatInput.focus();
+    };
+  }
 
   setStatus("READY TO SIGN IN.");
   if (accessToken && userId) {
