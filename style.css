@@ -249,6 +249,19 @@ input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #111811 inset !important
 .gtag-log-entry { font-size: 7.5px; line-height: 1.7; margin-bottom: 6px; color: #bbb; }
 .gtag-log-ver { color: #ffaa00; }
 
+#guest-nick-input {
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid #33ff33;
+  color: #33ff33;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  outline: none;
+  padding: 6px 2px;
+}
+#guest-nick-input::placeholder { color: #1f661f; }
+
 #vip-flare-input:-webkit-autofill {
   -webkit-box-shadow: 0 0 0 30px #111811 inset !important;
   -webkit-text-fill-color: #ffdd44 !important;
