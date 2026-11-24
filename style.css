@@ -174,6 +174,17 @@ input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #111811 inset !important
   display: flex; align-items: center; gap: 12px;
 }
 
+#gtag-vip-flare-banner {
+  position: fixed; top: 18px; left: 50%; transform: translateX(-50%);
+  width: 520px; max-width: 92vw; background: #141106; border: 4px solid #ffaa00;
+  box-shadow: 0 0 0 4px #000, 0 0 24px rgba(255,170,0,0.75), inset 0 0 18px rgba(255,170,0,0.3);
+  padding: 12px 16px; z-index: 10001; text-align: center; pointer-events: none;
+  animation: vipFlareDrop 0.25s ease-out;
+}
+#vip-flare-sender { font-size: 8px; color: #ffdd44; border-bottom: 2px solid #ffaa00; padding-bottom: 6px; margin-bottom: 8px; }
+#vip-flare-msg { font-size: 10px; color: #33ff33; line-height: 1.5; text-shadow: 0 0 6px rgba(51,255,51,0.5); word-wrap: break-word; }
+@keyframes vipFlareDrop { from { transform: translate(-50%, -25px); opacity: 0; } to { transform: translate(-50%, 0); opacity: 1; } }
+
 #gtag-toast {
   position: fixed; bottom: 16px; right: 16px; width: 340px; max-width: 90vw;
   background: #111811; border: 4px solid #2b2b2b;
