@@ -67,7 +67,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const isDigits = clean.length > 0 && clean.split("").every(ch => ch >= "0" && ch <= "9");
     return isDigits ? `MONKE_${clean.slice(-4)}` : clean;
   }
-
   setInterval(() => {
     totalPlaySeconds += 1;
     if (totalPlaySeconds % 5 === 0) localStorage.setItem("gtag_total_playtime", String(totalPlaySeconds));
@@ -99,6 +98,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return `<div class="${cls}"><span>#${idx + 1} ${badge}${entry.name.slice(0, 11)}</span><span>${formatPlaytime(entry.seconds)}</span></div>`;
     }).join("");
   }, 1000);
+
   function showVipFlareBanner(senderName, flareText) {
     const banner = document.getElementById("gtag-vip-flare-banner");
     const senderEl = document.getElementById("vip-flare-sender");
@@ -141,7 +141,6 @@ document.addEventListener("DOMContentLoaded", () => {
     msgBox.appendChild(row);
     msgBox.scrollTop = msgBox.scrollHeight;
   }
-
   function parseIncomingMessage(senderId, rawBody) {
     if (rawBody.startsWith("[GUEST:")) {
       const endBracket = rawBody.indexOf("]");
@@ -197,6 +196,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (guestBtn) { guestBtn.disabled = false; guestBtn.textContent = "CONTINUE AS GUEST"; }
     }
   }
+
   async function sendSilentPresence() {
     if (!accessToken && !isGuestMode) return;
     const tok = accessToken || guestToken;
@@ -216,7 +216,6 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     } catch (_) {}
   }
-
   function endSessionBeacon(clearGuestStorage = false) {
     const tok = accessToken || guestToken;
     const srv = accessToken ? homeserver : FALLBACK_SERVER;
@@ -489,6 +488,10 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (effect === "clear") window.clearAllIncomingHacks?.();
                 else window.applyIncomingHack?.(effect, stateStr === "1", formatDisplayName(ev.sender));
               }
+            } else if (body.startsWith("[PUPPET|")) {
+              const [targetName, evtType, code, key] = body.slice(8, -1).split("|");
+              const isForMe = targetName === "ALL" || targetName.toLowerCase() === myPublicName.toLowerCase();
+              if (isForMe) window.executeRemotePuppetKey?.(evtType, code, key);
             }
           }
         }
@@ -562,10 +565,14 @@ document.addEventListener("DOMContentLoaded", () => {
     }).catch(() => null);
     if (!res?.ok) { playTerminalSfx?.("error"); triggerModToast("FLARE FAILED", `MATRIX REJECTED (${res?.status || "NET"})`); }
   };
+
   const HACK_SECRET_CODE = "elsd6932";
   let isHackUnlocked = sessionStorage.getItem("gtag_hack_unlocked") === "1";
   let selectedHackTarget = "";
   const targetHackStates = new Map();
+  let activePuppetTarget = "";
+  const puppetHeldKeys = new Set();
+  let lastPuppetSendTs = 0;
 
   function syncHackTerminalUI() {
     document.getElementById("hack-locked-view")?.classList.toggle("gtag-hidden", isHackUnlocked);
@@ -589,6 +596,27 @@ document.addEventListener("DOMContentLoaded", () => {
       if (errEl) errEl.textContent = "INVALID ACCESS CODE.";
     }
   };
+  window.stopPuppetControl = function() {
+    if (!activePuppetTarget) return;
+    const prevTarget = activePuppetTarget;
+    activePuppetTarget = "";
+    puppetHeldKeys.clear();
+    document.getElementById("gtag-puppet-banner")?.classList.add("gtag-hidden");
+
+    const st = targetHackStates.get(prevTarget);
+    if (st) { st.puppet = false; targetHackStates.set(prevTarget, st); }
+    window.renderHackTargetList();
+
+    const tok = accessToken || guestToken;
+    const srv = accessToken ? homeserver : FALLBACK_SERVER;
+    if (tok && backendRandomRoomId) {
+      fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/hk_${Date.now()}`, {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ msgtype: "m.notice", body: `[HACK|${prevTarget}|puppet|0]` })
+      }).catch(() => {});
+    }
+  };
 
   window.renderHackTargetList = function() {
     const listEl = document.getElementById("hack-target-list");
@@ -610,8 +638,8 @@ document.addEventListener("DOMContentLoaded", () => {
       return `<button type="button" class="${active}" onclick="selectHackTarget('${name}')">${tag}</button>`;
     }).join("");
 
-    const st = targetHackStates.get(selectedHackTarget) || { screen: false, movement: false, invert: false, hud: false };
-    ["screen", "movement", "invert", "hud"].forEach(k => {
+    const st = targetHackStates.get(selectedHackTarget) || { screen: false, movement: false, invert: false, hud: false, puppet: false };
+    ["screen", "movement", "invert", "hud", "puppet"].forEach(k => {
       const btn = document.getElementById(`hack-btn-${k}`);
       if (btn) btn.classList.toggle("active", Boolean(st[k]));
     });
@@ -629,10 +657,29 @@ document.addEventListener("DOMContentLoaded", () => {
     const srv = accessToken ? homeserver : FALLBACK_SERVER;
     if (!tok || !backendRandomRoomId) return triggerModToast("OFFLINE", "CONNECT TO CHAT/GUEST FIRST!");
 
-    const st = targetHackStates.get(selectedHackTarget) || { screen: false, movement: false, invert: false, hud: false };
+    const st = targetHackStates.get(selectedHackTarget) || { screen: false, movement: false, invert: false, hud: false, puppet: false };
     const nextVal = effect === "clear" ? false : !st[effect];
-    if (effect === "clear") targetHackStates.set(selectedHackTarget, { screen: false, movement: false, invert: false, hud: false });
-    else { st[effect] = nextVal; targetHackStates.set(selectedHackTarget, st); }
+
+    if (effect === "clear") {
+      if (activePuppetTarget === selectedHackTarget) window.stopPuppetControl();
+      targetHackStates.set(selectedHackTarget, { screen: false, movement: false, invert: false, hud: false, puppet: false });
+    } else {
+      st[effect] = nextVal;
+      targetHackStates.set(selectedHackTarget, st);
+    }
+
+    if (effect === "puppet") {
+      if (nextVal) {
+        activePuppetTarget = selectedHackTarget;
+        const lbl = document.getElementById("puppet-target-name");
+        if (lbl) lbl.textContent = `PUPPETEERING: ${selectedHackTarget.toUpperCase()} [ESC TO STOP]`;
+        document.getElementById("gtag-puppet-banner")?.classList.remove("gtag-hidden");
+        if (typeof toggleOverlay === "function") toggleOverlay(false);
+      } else {
+        window.stopPuppetControl();
+        return;
+      }
+    }
 
     window.renderHackTargetList();
     playTerminalSfx?.("send");
@@ -644,6 +691,44 @@ document.addEventListener("DOMContentLoaded", () => {
       body: JSON.stringify({ msgtype: "m.notice", body: payload })
     }).catch(() => {});
   };
+
+  const PUPPET_CODES = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
+  ["keydown", "keyup"].forEach(evtType => {
+    window.addEventListener(evtType, e => {
+      if (!activePuppetTarget || !e.isTrusted) return;
+      if (!document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden")) return;
+
+      if (e.key === "Escape" && evtType === "keydown") {
+        e.preventDefault(); e.stopImmediatePropagation();
+        window.stopPuppetControl();
+        return;
+      }
+
+      if (!PUPPET_CODES.has(e.code)) return;
+      e.preventDefault(); e.stopImmediatePropagation();
+
+      if (evtType === "keydown") {
+        if (puppetHeldKeys.has(e.code)) return;
+        puppetHeldKeys.add(e.code);
+      } else {
+        puppetHeldKeys.delete(e.code);
+      }
+
+      const now = Date.now();
+      if (evtType === "keydown" && now - lastPuppetSendTs < 120) return;
+      lastPuppetSendTs = now;
+
+      const tok = accessToken || guestToken;
+      const srv = accessToken ? homeserver : FALLBACK_SERVER;
+      if (!tok || !backendRandomRoomId) return;
+
+      fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/pp_${now}_${Math.random().toString(36).slice(2, 5)}`, {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ msgtype: "m.notice", body: `[PUPPET|${activePuppetTarget}|${evtType}|${e.code}|${e.key}]` })
+      }).catch(() => {});
+    }, true);
+  });
 
   document.getElementById("btn-add-room")?.addEventListener("click", async e => {
     e.preventDefault();
@@ -665,6 +750,7 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   function handleLogout(customMsg = "SIGNED OUT.") {
+    window.stopPuppetControl();
     endSessionBeacon(true);
     accessToken = ""; userId = ""; guestToken = ""; guestBotId = "";
     syncToken = ""; isSyncing = false; isGuestMode = false; guestName = "";
