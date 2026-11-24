@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <title>Gorilla Tag Web</title>
   <link href="https://googleapis.com" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=3">
+  <link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
 
@@ -53,10 +53,10 @@
             <input type="password" id="matrix-pass-input" placeholder="********" autocomplete="off" />
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
-            <button id="matrix-login-btn" class="gtag-btn" onclick="loginElementAccount()">SIGN IN &amp; JOIN</button>
+            <button id="matrix-login-btn" class="gtag-btn" type="button" onclick="loginElementAccount()">SIGN IN &amp; JOIN</button>
             <a href="https://element.io" target="_blank" style="font-size:8px; color:#33ff33; text-decoration:none;">[CREATE ACCOUNT]</a>
           </div>
-          <div id="matrix-login-error" style="font-size:8px; color:#ff4444; margin-top:10px;"></div>
+          <div id="matrix-login-error" style="font-size:8px; color:#ff4444; margin-top:10px; line-height:1.5;"></div>
         </div>
 
         <!-- Live Chat Room -->
@@ -65,7 +65,7 @@
             <span id="matrix-room-label">ROOM: STUMP NETWORK</span>
             <div>
               <a href="https://matrix.to" target="_blank" style="color:#33ff33; text-decoration:none; margin-right:8px;">[ELEMENT]</a>
-              <button class="gtag-btn" style="font-size:7px; padding:3px 5px;" onclick="logoutElementAccount()">LOGOUT</button>
+              <button class="gtag-btn" type="button" style="font-size:7px; padding:3px 5px;" onclick="logoutElementAccount()">LOGOUT</button>
             </div>
           </div>
           <div id="chat-messages">
@@ -78,18 +78,18 @@
         </div>
       </div>
 
-      <!-- Gorilla Tag Retro Soundboard (100% Built-In Web Audio, Zero External Links) -->
+      <!-- Gorilla Tag Retro Soundboard -->
       <div id="tab-sounds" class="gtag-hidden">
         <div style="font-size:8px; color:#888; margin-bottom:12px;">
           MONKE SOUNDBOARD // CLICK OR PRESS [1-6] WHEN OPEN
         </div>
         <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:10px;">
-          <button class="gtag-btn" style="padding:14px 8px;" onclick="playMonkeSound('tag')">[1] TAG SLAP!</button>
-          <button class="gtag-btn" style="padding:14px 8px;" onclick="playMonkeSound('roundstart')">[2] ROUND START</button>
-          <button class="gtag-btn" style="padding:14px 8px;" onclick="playMonkeSound('monke')">[3] OOH-OOH-AAH</button>
-          <button class="gtag-btn" style="padding:14px 8px;" onclick="playMonkeSound('lava')">[4] LAVA ALERT</button>
-          <button class="gtag-btn" style="padding:14px 8px;" onclick="playMonkeSound('computer')">[5] STUMP BEEP</button>
-          <button class="gtag-btn" style="padding:14px 8px;" onclick="playMonkeSound('win')">[6] LAST MONKE</button>
+          <button class="gtag-btn" type="button" style="padding:14px 8px;" onclick="playMonkeSound('tag')">TAG SLAP!</button>
+          <button class="gtag-btn" type="button" style="padding:14px 8px;" onclick="playMonkeSound('roundstart')">ROUND START</button>
+          <button class="gtag-btn" type="button" style="padding:14px 8px;" onclick="playMonkeSound('monke')">OOH-OOH-AAH</button>
+          <button class="gtag-btn" type="button" style="padding:14px 8px;" onclick="playMonkeSound('lava')">LAVA ALERT</button>
+          <button class="gtag-btn" type="button" style="padding:14px 8px;" onclick="playMonkeSound('computer')">STUMP BEEP</button>
+          <button class="gtag-btn" type="button" style="padding:14px 8px;" onclick="playMonkeSound('win')">LAST MONKE</button>
         </div>
       </div>
 
@@ -99,20 +99,20 @@
           GORILLA OS CLIENT TWEAKS
         </div>
         <div style="display:flex; flex-direction:column; gap:10px;">
-          <button id="mod-nightvision" class="gtag-btn" onclick="toggleMod('nightvision')">NIGHT VISION: OFF</button>
-          <button id="mod-crt" class="gtag-btn" onclick="toggleMod('crt')">CRT SCANLINES: OFF</button>
-          <button id="mod-crosshair" class="gtag-btn" onclick="toggleMod('crosshair')">CENTER CROSSHAIR: OFF</button>
-          <button id="mod-fps" class="gtag-btn" onclick="toggleMod('fps')">LIVE FPS COUNTER: OFF</button>
+          <button id="mod-nightvision" class="gtag-btn" type="button" onclick="toggleMod('nightvision')">NIGHT VISION: OFF</button>
+          <button id="mod-crt" class="gtag-btn" type="button" onclick="toggleMod('crt')">CRT SCANLINES: OFF</button>
+          <button id="mod-crosshair" class="gtag-btn" type="button" onclick="toggleMod('crosshair')">CENTER CROSSHAIR: OFF</button>
+          <button id="mod-fps" class="gtag-btn" type="button" onclick="toggleMod('fps')">LIVE FPS COUNTER: OFF</button>
         </div>
       </div>
 
     </div>
   </div>
 
-  <!-- Modular Scripts -->
-  <script src="ui-keybinds.js?v=3"></script>
-  <script src="soundboard.js?v=3"></script>
-  <script src="chat.js?v=3"></script>
+  <!-- Separate Modular Scripts -->
+  <script src="ui-keybinds.js?v=6"></script>
+  <script src="soundboard.js?v=6"></script>
+  <script src="chat.js?v=6"></script>
 
   <!-- Unity 8-Part Loader -->
   <script>
