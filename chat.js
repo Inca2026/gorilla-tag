@@ -1,12 +1,13 @@
 document.addEventListener("DOMContentLoaded", () => {
   const GENERAL_ALIAS = "#stump-network-general:matrix.org";
-  const RANDOM_ALIAS = "#stump-network-random:matrix.org";
+  const RANDOM_ALIAS = "#stump-network-random:matrix.org"; // Silent backend presence & ping room
   const FALLBACK_SERVER = "https://matrix.org";
 
   const loginBox = document.getElementById("matrix-login-box");
   const chatBox = document.getElementById("matrix-chat-box");
   const statusLabel = document.getElementById("matrix-login-error");
   const loginBtn = document.getElementById("matrix-login-btn");
+  const guestBtn = document.getElementById("matrix-guest-btn");
   const userField = document.getElementById("matrix-user-input");
   const passField = document.getElementById("matrix-pass-input");
   const chatInput = document.getElementById("chat-input");
@@ -16,18 +17,19 @@ document.addEventListener("DOMContentLoaded", () => {
   let userId = localStorage.getItem("gtag_mx_user") || "";
   let homeserver = localStorage.getItem("gtag_mx_server") || FALLBACK_SERVER;
   let activeRoomId = localStorage.getItem("gtag_mx_custom_room") || "";
-  let randomRoomId = "";
+  let backendRandomRoomId = "";
   let activeChannelKey = "general";
 
   let guestToken = sessionStorage.getItem("gtag_lb_guest_token") || "";
   let guestUserId = sessionStorage.getItem("gtag_lb_guest_user") || "";
-  let guestRandomRoomId = "";
+  let isGuestMode = false;
 
   let syncToken = "";
   let isSyncing = false;
   let sidebarRooms = [];
   let toastTimeout = null;
 
+  // Only full Element accounts unlock VIP features (guests do NOT set isMatrixConnected = true)
   window.isMatrixConnected = Boolean(accessToken && userId);
 
   let totalPlaySeconds = parseInt(localStorage.getItem("gtag_total_playtime") || "0", 10);
@@ -98,11 +100,11 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     } catch (_) {}
 
-    const heartbeatRoom = randomRoomId || guestRandomRoomId;
-    if (heartbeatRoom) {
-      const txnId = `hb_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    // Silently ping #stump-network-random:matrix.org in the background (hidden from chat UI)
+    if (backendRandomRoomId) {
+      const txnId = `ping_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
       try {
-        await fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(heartbeatRoom)}/send/m.room.message/${txnId}`, {
+        await fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/${txnId}`, {
           method: "PUT",
           headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
           body: JSON.stringify({ msgtype: "m.notice", body: `[TIME:${totalPlaySeconds}]` })
@@ -111,7 +113,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  setInterval(sendSilentPresence, 20000);
+  setInterval(sendSilentPresence, 18000);
 
   function setStatus(msg, isError = false) {
     if (!statusLabel) return;
@@ -128,7 +130,7 @@ document.addEventListener("DOMContentLoaded", () => {
     toastTitle.textContent = title;
     toastBody.textContent = bodyText;
     toast.classList.remove("gtag-hidden");
-    if (typeof playTerminalSfx === "function") playTerminalSfx("receive");
+    playTerminalSfx?.("receive");
 
     clearTimeout(toastTimeout);
     toastTimeout = setTimeout(() => toast.classList.add("gtag-hidden"), 4500);
@@ -149,9 +151,10 @@ document.addEventListener("DOMContentLoaded", () => {
     msgBox.scrollTop = msgBox.scrollHeight;
   }
 
-  async function initGuestLeaderboardSession() {
+  async function ensureGuestSession(openChatAfter = false) {
     if (accessToken) return;
     try {
+      if (openChatAfter && guestBtn) { guestBtn.disabled = true; guestBtn.textContent = "JOINING..."; }
       if (!guestToken) {
         const regRes = await fetch(`${FALLBACK_SERVER}/_matrix/client/v3/register?kind=guest`, {
           method: "POST", headers: { "Content-Type": "application/json" }, body: "{}"
@@ -164,25 +167,34 @@ document.addEventListener("DOMContentLoaded", () => {
           sessionStorage.setItem("gtag_lb_guest_user", guestUserId);
         }
       }
-      if (!guestToken) return;
+      if (!guestToken) throw new Error("Guest registration unavailable");
 
-      const lookupRes = await fetch(
-        `${FALLBACK_SERVER}/_matrix/client/v3/directory/room/${encodeURIComponent(RANDOM_ALIAS)}`,
-        { headers: { "Authorization": `Bearer ${guestToken}` } }
-      );
-      const lookupData = await lookupRes.json();
-      if (!lookupData.room_id) return;
-
-      guestRandomRoomId = lookupData.room_id;
-      await fetch(`${FALLBACK_SERVER}/_matrix/client/v3/join/${encodeURIComponent(guestRandomRoomId)}`, {
-        method: "POST",
-        headers: { "Authorization": `Bearer ${guestToken}`, "Content-Type": "application/json" },
-        body: "{}"
+      // Silently join #stump-network-random:matrix.org for backend player tracking
+      const rndRes = await fetch(`${FALLBACK_SERVER}/_matrix/client/v3/directory/room/${encodeURIComponent(RANDOM_ALIAS)}`, {
+        headers: { "Authorization": `Bearer ${guestToken}` }
       });
+      const rndData = await rndRes.json();
+      if (rndData.room_id) {
+        backendRandomRoomId = rndData.room_id;
+        await fetch(`${FALLBACK_SERVER}/_matrix/client/v3/join/${encodeURIComponent(backendRandomRoomId)}`, {
+          method: "POST", headers: { "Authorization": `Bearer ${guestToken}`, "Content-Type": "application/json" }, body: "{}"
+        });
+      }
 
-      await sendSilentPresence();
-      if (!isSyncing) { isSyncing = true; startSyncLoop(); }
-    } catch (_) {}
+      if (openChatAfter) {
+        isGuestMode = true;
+        window.isMatrixConnected = false;
+        if (typeof syncModUI === "function") syncModUI();
+        await openStumpRoom(true);
+      } else {
+        await sendSilentPresence();
+        if (!isSyncing) { isSyncing = true; startSyncLoop(); }
+      }
+    } catch (err) {
+      if (openChatAfter) setStatus(`GUEST ERROR: ${err.message}`, true);
+    } finally {
+      if (guestBtn) { guestBtn.disabled = false; guestBtn.textContent = "CONTINUE AS GUEST"; }
+    }
   }
   async function resolveHomeserver(domain) {
     try {
@@ -200,11 +212,11 @@ document.addEventListener("DOMContentLoaded", () => {
     const rawUser = userField.value.trim();
     const password = passField.value;
     if (!rawUser || !password) {
-      if (typeof playTerminalSfx === "function") playTerminalSfx("error");
+      playTerminalSfx?.("error");
       return setStatus("ENTER YOUR ELEMENT USERNAME AND PASSWORD.", true);
     }
 
-    if (typeof playTerminalSfx === "function") playTerminalSfx("click");
+    playTerminalSfx?.("click");
     loginBtn.disabled = true;
     loginBtn.textContent = "CONNECTING...";
     setStatus("LOOKING UP HOMESERVER...");
@@ -235,7 +247,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!loginRes.ok || !loginData.access_token) throw new Error(loginData.error || `Login rejected (${loginRes.status})`);
 
       if (guestUserId) onlinePlayers.delete(formatDisplayName(guestUserId));
-      guestToken = ""; guestUserId = ""; guestRandomRoomId = "";
+      guestToken = ""; guestUserId = ""; isGuestMode = false;
       sessionStorage.removeItem("gtag_lb_guest_token");
       sessionStorage.removeItem("gtag_lb_guest_user");
 
@@ -251,10 +263,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (typeof syncModUI === "function") syncModUI();
       passField.value = "";
       setStatus("");
-      if (typeof playTerminalSfx === "function") playTerminalSfx("vip");
-      await openStumpRoom();
+      playTerminalSfx?.("vip");
+      await openStumpRoom(false);
     } catch (err) {
-      if (typeof playTerminalSfx === "function") playTerminalSfx("error");
+      playTerminalSfx?.("error");
       setStatus(`LOGIN ERROR: ${err.message}`, true);
     } finally {
       loginBtn.disabled = false;
@@ -266,16 +278,14 @@ document.addEventListener("DOMContentLoaded", () => {
     const listEl = document.getElementById("room-sidebar-list");
     if (!listEl) return;
     listEl.innerHTML = "";
+    // Only user-facing rooms are rendered here (#stump-network-random stays invisible)
     sidebarRooms.forEach((rm) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = rm.name === activeChannelKey ? "gtag-room-item active" : "gtag-room-item";
       btn.textContent = `#${rm.name}`;
       btn.title = rm.alias || rm.name;
-      btn.onclick = () => {
-        if (typeof playTerminalSfx === "function") playTerminalSfx("tab");
-        selectStumpChannel(rm);
-      };
+      btn.onclick = () => { playTerminalSfx?.("tab"); selectStumpChannel(rm); };
       listEl.appendChild(btn);
     });
   }
@@ -284,24 +294,27 @@ document.addEventListener("DOMContentLoaded", () => {
     activeChannelKey = channelObj.name;
     const label = document.getElementById("matrix-room-label");
     renderRoomSidebar();
-    if (label) label.textContent = `STUMP NETWORK // #${channelObj.name.toUpperCase()}`;
+    const roleTag = isGuestMode ? " [GUEST]" : " [★ VIP]";
+    if (label) label.textContent = `STUMP // #${channelObj.name.toUpperCase()}${roleTag}`;
 
     if (channelObj.id) {
       activeRoomId = channelObj.id;
-      localStorage.setItem("gtag_mx_custom_room", activeRoomId);
+      if (!isGuestMode) localStorage.setItem("gtag_mx_custom_room", activeRoomId);
       msgBox.innerHTML = "";
       addChatLine("SYSTEM", `CONNECTED TO #${channelObj.name.toUpperCase()}`);
       await loadRecentRoomHistory(activeRoomId);
       chatInput?.focus();
     } else {
       msgBox.innerHTML = "";
-      addChatLine("SYSTEM", `ROOM ${channelObj.alias} NOT FOUND OR PRIVATE ON MATRIX.ORG`);
+      addChatLine("SYSTEM", `ROOM ${channelObj.alias} UNAVAILABLE FOR GUESTS OR NOT FOUND`);
     }
   }
   async function loadRecentRoomHistory(rId) {
+    const tok = accessToken || guestToken;
+    const srv = accessToken ? homeserver : FALLBACK_SERVER;
     try {
-      const res = await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(rId)}/messages?dir=b&limit=20`, {
-        headers: { "Authorization": `Bearer ${accessToken}` }
+      const res = await fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(rId)}/messages?dir=b&limit=20`, {
+        headers: { "Authorization": `Bearer ${tok}` }
       });
       if (!res.ok) return;
       const data = await res.json();
@@ -317,15 +330,17 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function resolveAndJoinAlias(alias) {
-    const lookupRes = await fetch(`${homeserver}/_matrix/client/v3/directory/room/${encodeURIComponent(alias)}`, {
-      headers: { "Authorization": `Bearer ${accessToken}` }
+    const tok = accessToken || guestToken;
+    const srv = accessToken ? homeserver : FALLBACK_SERVER;
+    const lookupRes = await fetch(`${srv}/_matrix/client/v3/directory/room/${encodeURIComponent(alias)}`, {
+      headers: { "Authorization": `Bearer ${tok}` }
     });
     const lookupData = await lookupRes.json();
     if (!lookupRes.ok || !lookupData.room_id) throw new Error(lookupData.error || `Room ${alias} not found`);
     const rId = lookupData.room_id;
-    await fetch(`${homeserver}/_matrix/client/v3/join/${encodeURIComponent(rId)}`, {
+    await fetch(`${srv}/_matrix/client/v3/join/${encodeURIComponent(rId)}`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
       body: "{}"
     });
     return rId;
@@ -335,26 +350,25 @@ document.addEventListener("DOMContentLoaded", () => {
     sidebarRooms = [];
     try { sidebarRooms.push({ name: "general", alias: GENERAL_ALIAS, id: await resolveAndJoinAlias(GENERAL_ALIAS) }); }
     catch (_) { sidebarRooms.push({ name: "general", alias: GENERAL_ALIAS, id: null }); }
-
-    try {
-      randomRoomId = await resolveAndJoinAlias(RANDOM_ALIAS);
-      sidebarRooms.push({ name: "random", alias: RANDOM_ALIAS, id: randomRoomId });
-    } catch (_) { sidebarRooms.push({ name: "random", alias: RANDOM_ALIAS, id: null }); }
-
+    try { backendRandomRoomId = await resolveAndJoinAlias(RANDOM_ALIAS); } catch (_) {}
     renderRoomSidebar();
   }
 
-  async function openStumpRoom() {
+  async function openStumpRoom(asGuest = false) {
     loginBox.classList.add("gtag-hidden");
     chatBox.classList.remove("gtag-hidden");
     msgBox.innerHTML = "";
-    addChatLine("SYSTEM", `LOGGED IN AS ${userId} [★ ELEMENT VIP UNLOCKED]`, true);
+    if (asGuest) {
+      addChatLine("SYSTEM", `SIGNED IN AS GUEST (${formatDisplayName(guestUserId)})`);
+      addChatLine("SYSTEM", "SIGN IN WITH ELEMENT TO UNLOCK THE [★ VIP] TAB & MODS!");
+    } else {
+      addChatLine("SYSTEM", `LOGGED IN AS ${userId} [★ VIP TAB UNLOCKED]`, true);
+    }
     await populateStumpSidebar();
     if (sidebarRooms.at(0)) await selectStumpChannel(sidebarRooms.at(0));
     await sendSilentPresence();
     if (!isSyncing) { isSyncing = true; startSyncLoop(); }
   }
-
   async function startSyncLoop() {
     while ((accessToken || guestToken) && isSyncing) {
       const tok = accessToken || guestToken;
@@ -386,32 +400,34 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const joinedRooms = data.rooms?.join || {};
-        const trackedRandomId = randomRoomId || guestRandomRoomId;
-        if (trackedRandomId && joinedRooms[trackedRandomId]) {
-          for (const ev of (joinedRooms[trackedRandomId].timeline?.events || [])) {
-            if (ev.type === "m.room.message" && ev.content?.body?.startsWith("[TIME:") && ev.sender !== selfId) {
+        if (backendRandomRoomId && joinedRooms[backendRandomRoomId]) {
+          for (const ev of (joinedRooms[backendRandomRoomId].timeline?.events || [])) {
+            if (ev.type === "m.room.message" && ev.content?.body && ev.sender !== selfId) {
               const displayUser = formatDisplayName(ev.sender);
-              const isNew = !onlinePlayers.has(displayUser);
-              onlinePlayers.set(displayUser, { seconds: parseInt(ev.content.body.slice(6, -1), 10) || 0, lastSeen: Date.now() });
-              if (isNew && !isInitialSync && accessToken && typeof modConfig !== "undefined" && modConfig.stumpbeacon) {
-                showGtagNotification("STUMP RADAR // MONKE DETECTED", `${displayUser} JOINED #STUMP-NETWORK-RANDOM!`);
+              if (ev.content.body.startsWith("[TIME:")) {
+                const isNew = !onlinePlayers.has(displayUser);
+                onlinePlayers.set(displayUser, { seconds: parseInt(ev.content.body.slice(6, -1), 10) || 0, lastSeen: Date.now() });
+                if (isNew && !isInitialSync && accessToken && typeof modConfig !== "undefined" && modConfig.stumpbeacon) {
+                  showGtagNotification("VIP RADAR // MONKE ONLINE", `${displayUser} JUST CAME ONLINE!`);
+                }
+              } else if (ev.content.body.startsWith("[VIP_FLARE]") && !isInitialSync) {
+                showGtagNotification("★ VIP BROADCAST", `${displayUser}: ${ev.content.body.slice(11)}`);
               }
             }
           }
         }
 
-        const targetRoom = activeRoomId || trackedRandomId;
-        for (const ev of (joinedRooms[targetRoom]?.timeline?.events || [])) {
+        for (const ev of (joinedRooms[activeRoomId]?.timeline?.events || [])) {
           if (ev.type === "m.room.message" && ev.content?.body && !ev.content.body.startsWith("[TIME:") && !ev.content.body.startsWith("[POS:")) {
             const displayUser = formatDisplayName(ev.sender);
             if (ev.sender !== selfId && !isInitialSync) {
               onlinePlayers.set(displayUser, { seconds: onlinePlayers.get(displayUser)?.seconds || 0, lastSeen: Date.now() });
             }
-            if (accessToken && !isInitialSync) {
+            if ((accessToken || isGuestMode) && !isInitialSync) {
               addChatLine(displayUser, ev.content.body, !isGuestName(displayUser));
               const closed = document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden");
               if (ev.sender !== selfId) {
-                if (typeof modConfig !== "undefined" && modConfig.chatnotify) playTerminalSfx?.("vip");
+                if (accessToken && typeof modConfig !== "undefined" && modConfig.chatnotify) playTerminalSfx?.("vip");
                 if (closed) showGtagNotification("STUMP CHAT // REPLY", `[${displayUser}]: ${ev.content.body}`);
               }
             }
@@ -422,12 +438,14 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function sendMessage(text) {
-    if (!accessToken || !text || !activeRoomId) return;
+    const tok = accessToken || (isGuestMode ? guestToken : "");
+    const srv = accessToken ? homeserver : FALLBACK_SERVER;
+    if (!tok || !text || !activeRoomId) return;
     const txnId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     try {
-      const res = await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.room.message/${txnId}`, {
+      const res = await fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.room.message/${txnId}`, {
         method: "PUT",
-        headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
         body: JSON.stringify({ msgtype: "m.text", body: text })
       });
       if (res?.ok) playTerminalSfx?.("send");
@@ -435,13 +453,29 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (err) { addChatLine("SYSTEM", `NETWORK ERROR: ${err.message}`); }
   }
 
+  window.sendVipBroadcastFlare = async function() {
+    if (!accessToken || !backendRandomRoomId) return triggerModToast("VIP ONLY", "ELEMENT ACCOUNT REQUIRED!");
+    const shout = prompt("Send a global VIP toast alert to all online monkes:");
+    if (!shout?.trim()) return;
+    await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/flare_${Date.now()}`, {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "m.notice", body: `[VIP_FLARE]${shout.trim().slice(0, 80)}` })
+    });
+    playTerminalSfx?.("vip");
+    triggerModToast("VIP FLARE SENT", "BROADCASTED TO ALL ONLINE PLAYERS!");
+  };
+
   document.getElementById("btn-add-room")?.addEventListener("click", async e => {
-    e.preventDefault(); playTerminalSfx?.("click");
+    e.preventDefault();
+    if (!accessToken) return triggerModToast("ELEMENT REQUIRED", "GUESTS CANNOT JOIN CUSTOM ROOMS.");
+    playTerminalSfx?.("click");
     const rawAlias = prompt("Enter Stump Channel Address (e.g. #stump-network-clips:matrix.org):");
     if (!rawAlias?.trim()) return;
     let formatted = rawAlias.trim();
     if (!formatted.startsWith("#") && !formatted.startsWith("!")) formatted = `#${formatted}`;
     if (!formatted.includes(":")) formatted = `${formatted}:matrix.org`;
+    if (formatted.toLowerCase() === RANDOM_ALIAS) return addChatLine("SYSTEM", "RESERVED FOR BACKEND TELEMETRY.");
     try {
       const rId = await resolveAndJoinAlias(formatted);
       let shortName = formatted.split(":").at(0).replace(/^#stump-network-/, "").replace(/^#/, "");
@@ -452,21 +486,22 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   function handleLogout() {
-    accessToken = ""; userId = ""; syncToken = ""; isSyncing = false; window.isMatrixConnected = false;
+    accessToken = ""; userId = ""; syncToken = ""; isSyncing = false; isGuestMode = false; window.isMatrixConnected = false;
     ["gtag_mx_token", "gtag_mx_user", "gtag_mx_server", "gtag_mx_custom_room"].forEach(k => localStorage.removeItem(k));
     if (typeof syncModUI === "function") syncModUI();
     chatBox.classList.add("gtag-hidden"); loginBox.classList.remove("gtag-hidden");
-    playTerminalSfx?.("close"); setStatus("SIGNED OUT."); initGuestLeaderboardSession();
+    playTerminalSfx?.("close"); setStatus("SIGNED OUT."); ensureGuestSession(false);
   }
 
   window.loginElementAccount = handleLogin;
   window.logoutElementAccount = handleLogout;
   window.sendStumpChatInput = () => { const msg = chatInput.value.trim(); if (msg) { chatInput.value = ""; sendMessage(msg); } };
   if (loginBtn) loginBtn.onclick = e => { e.preventDefault(); handleLogin(); };
+  if (guestBtn) guestBtn.onclick = e => { e.preventDefault(); ensureGuestSession(true); };
   document.getElementById("matrix-logout-btn")?.addEventListener("click", e => { e.preventDefault(); handleLogout(); });
   document.getElementById("chat-send-btn")?.addEventListener("click", e => { e.preventDefault(); window.sendStumpChatInput(); chatInput.focus(); });
 
-  setStatus("READY TO SIGN IN.");
-  if (accessToken && userId) openStumpRoom();
-  else initGuestLeaderboardSession();
+  setStatus("READY TO SIGN IN OR CONTINUE AS GUEST.");
+  if (accessToken && userId) openStumpRoom(false);
+  else ensureGuestSession(false);
 });
