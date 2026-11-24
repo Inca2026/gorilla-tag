@@ -32,7 +32,7 @@ body, html {
 }
 
 .gtag-terminal {
-  width: 660px; max-width: 96vw; background: #111811;
+  width: 680px; max-width: 96vw; background: #111811;
   border: 6px solid #2b2b2b;
   box-shadow: 0 0 0 4px #000, inset 0 0 25px rgba(51, 255, 51, 0.25);
   padding: 16px;
@@ -54,15 +54,15 @@ body, html {
 
 .gtag-btn {
   background: #1d2b1d; color: #33ff33; border: 2px solid #33ff33;
-  font-family: 'Press Start 2P', monospace; font-size: 8.5px; padding: 6px 7px; cursor: pointer;
+  font-family: 'Press Start 2P', monospace; font-size: 8px; padding: 6px; cursor: pointer;
 }
 .gtag-btn:hover, .gtag-btn.active { background: #33ff33; color: #111811; }
 
-.gtag-btn.element-locked { border-color: #665522; color: #aa8833; background: #18150d; }
-.gtag-btn.element-locked:hover { background: #ffaa00; color: #111811; }
+.gtag-btn.vip-tab-btn { border-color: #ffaa00; color: #ffdd44; }
+.gtag-btn.vip-tab-btn:hover, .gtag-btn.vip-tab-btn.active { background: #ffaa00; color: #111811; }
 .gtag-chat-layout { display: flex; gap: 10px; align-items: stretch; }
 .gtag-room-sidebar {
-  width: 165px; min-width: 165px; background: #0a0f0a; border: 2px solid #1f3d1f;
+  width: 155px; min-width: 155px; background: #0a0f0a; border: 2px solid #1f3d1f;
   display: flex; flex-direction: column; padding: 6px;
 }
 .gtag-sidebar-head {
@@ -117,6 +117,7 @@ input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #111811 inset !important
 }
 .gtag-mod-grid .gtag-btn { font-size: 7.5px; padding: 8px 6px; text-align: left; }
 
+.gtag-vip-lock-card { background: #141108; border: 2px solid #ffaa00; padding: 16px; text-align: center; }
 .gtag-setting-row {
   display: flex; justify-content: space-between; align-items: center;
   padding: 8px 0; border-bottom: 1px solid #1f3d1f; font-size: 8px;
@@ -162,12 +163,9 @@ input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #111811 inset !important
 }
 .gtag-key-cap.pressed { background: #33ff33; color: #111811; }
 
-/* Draggable HUD Edit Mode */
 .hud-draggable-active {
-  pointer-events: auto !important;
-  cursor: move !important;
-  outline: 2px dashed #ffaa00 !important;
-  z-index: 9999 !important;
+  pointer-events: auto !important; cursor: move !important;
+  outline: 2px dashed #ffaa00 !important; z-index: 9999 !important;
 }
 #gtag-hud-edit-banner {
   position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
