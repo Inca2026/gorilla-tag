@@ -96,6 +96,15 @@ body, html {
   color: #1f661f;
 }
 
+/* Fix Chrome Autofill White Background */
+input:-webkit-autofill,
+input:-webkit-autofill:hover,
+input:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 30px #111811 inset !important;
+  -webkit-text-fill-color: #33ff33 !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
 /* Client Visual Mods (CRT Scanlines & Center Crosshair) */
 #crt-overlay {
   position: fixed; inset: 0; pointer-events: none; z-index: 90;
