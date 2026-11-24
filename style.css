@@ -221,6 +221,33 @@ input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #111811 inset !important
 #vip-flare-input::placeholder {
   color: #775511;
 }
+/* VIP Flare Inline Input & About Changelog */
+#vip-flare-input {
+  flex: 1;
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid #ffaa00;
+  color: #ffdd44;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  outline: none;
+  padding: 6px 2px;
+}
+
+#vip-flare-input::placeholder { color: #775511; }
+
+.gtag-changelog-box {
+  max-height: 120px;
+  overflow-y: auto;
+  border-top: 2px solid #1f3d1f;
+  padding-top: 8px;
+  margin-top: 8px;
+}
+.gtag-changelog-box::-webkit-scrollbar { width: 6px; }
+.gtag-changelog-box::-webkit-scrollbar-thumb { background: #33ff33; }
+.gtag-log-entry { font-size: 7.5px; line-height: 1.7; margin-bottom: 6px; color: #bbb; }
+.gtag-log-ver { color: #ffaa00; }
 
 #vip-flare-input:-webkit-autofill {
   -webkit-box-shadow: 0 0 0 30px #111811 inset !important;
