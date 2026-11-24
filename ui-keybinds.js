@@ -59,10 +59,30 @@ window.addEventListener('keydown', (e) => {
       return;
     }
 
-    // Prevent Unity from capturing keys while terminal is open
+    // Handle Enter key inside chat or login BEFORE stopping propagation
+    if (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter') {
+      if (document.activeElement === chatInput) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (typeof window.sendStumpChatInput === 'function') {
+          window.sendStumpChatInput();
+        }
+        return;
+      }
+      if (document.activeElement?.id === 'matrix-pass-input' || document.activeElement?.id === 'matrix-user-input') {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        if (typeof window.loginElementAccount === 'function') {
+          window.loginElementAccount();
+        }
+        return;
+      }
+    }
+
+    // Prevent Unity from capturing other keys while terminal is open
     e.stopImmediatePropagation();
 
-    // If Soundboard tab is open, keys 1-6 trigger sounds!
+    // If Soundboard tab is open, keys 1-6 trigger sounds
     if (!document.getElementById('tab-sounds').classList.contains('gtag-hidden')) {
       const soundMap = { '1': 'tag', '2': 'roundstart', '3': 'monke', '4': 'lava', '5': 'computer', '6': 'win' };
       if (soundMap[e.key]) {
@@ -71,7 +91,6 @@ window.addEventListener('keydown', (e) => {
       }
     }
   } else {
-    // Hotkeys while playing: [T] Chat, [B] Soundboard
     if (e.key.toLowerCase() === 't') {
       e.preventDefault();
       e.stopImmediatePropagation();
