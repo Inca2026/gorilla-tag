@@ -33,6 +33,12 @@
     <div id="lb-list" class="gtag-lb-list"></div>
   </div>
 
+  <div id="gtag-hack-blackout" class="gtag-hidden">
+    <div style="font-size:14px; margin-bottom:12px;">⚠ SCREEN DISABLED ⚠</div>
+    <div style="font-size:8px; color:#ff8888;">GORILLA OS DISPLAY OVERRIDDEN BY REMOTE TERMINAL</div>
+  </div>
+  <div id="gtag-hack-indicators" class="gtag-hidden"></div>
+
   <div id="gtag-hud-edit-banner" class="gtag-hidden">
     <span>DRAG ANY HUD MODULE TO REPOSITION</span>
     <button class="gtag-btn" onclick="toggleHudEditMode(false)">DONE</button>
@@ -46,12 +52,13 @@
   <div id="gtag-overlay" class="gtag-hidden">
     <div class="gtag-terminal">
       <div class="gtag-header">
-        <span>GORILLA OS v7.7</span>
+        <span>GORILLA OS v7.9</span>
         <div style="display:flex; gap:4px; flex-wrap:wrap;">
           <button id="btn-tab-chat" class="gtag-btn active" onclick="switchTab('chat')">CHAT</button>
           <button id="btn-tab-sounds" class="gtag-btn" onclick="switchTab('sounds')">SOUNDS</button>
           <button id="btn-tab-mods" class="gtag-btn" onclick="switchTab('mods')">MODS</button>
           <button id="btn-tab-vip" class="gtag-btn vip-tab-btn" onclick="switchTab('vip')">[★ VIP]</button>
+          <button id="btn-tab-hack" class="gtag-btn hack-tab-btn" onclick="switchTab('hack')">[HACK]</button>
           <button id="btn-tab-settings" class="gtag-btn" onclick="switchTab('settings')">SETTINGS</button>
           <button id="btn-tab-about" class="gtag-btn" onclick="switchTab('about')">ABOUT</button>
         </div>
@@ -104,7 +111,7 @@
       </div>
 
       <div id="tab-sounds" class="gtag-hidden">
-        <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">MONKE SOUNDBOARD // PRESS [1-6] OR [7-9] FOR ELEMENT VIP</div>
+        <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">MONKE SOUNDBOARD // ELEMENT VIP SOUNDS PLAY GLOBALLY!</div>
         <div class="gtag-mod-grid" style="max-height:260px;">
           <button class="gtag-btn" onclick="playMonkeSound('tag')"> TAG SLAP!</button>
           <button class="gtag-btn" onclick="playMonkeSound('roundstart')"> ROUND START</button>
@@ -185,6 +192,39 @@
           </div>
         </div>
       </div>
+
+      <div id="tab-hack" class="gtag-hidden">
+        <div id="hack-locked-view" class="gtag-panel-box" style="border-color:#ff4444; text-align:center; padding:16px;">
+          <div style="font-size:9px; color:#ff4444; margin-bottom:10px;">⚠ MONKE HACK TERMINAL // CLASSIFIED</div>
+          <div id="hack-code-error" style="font-size:7px; color:#ff4444; margin-bottom:8px;"></div>
+          <div class="gtag-input-row" style="margin-bottom:10px;">
+            <span style="color:#ff4444; font-size:8px;">CODE:</span>
+            <input id="hack-code-input" type="password" placeholder="ENTER SECRET CODE..." />
+            <button class="gtag-btn hack-tab-btn" onclick="unlockHackTerminal()">UNLOCK</button>
+          </div>
+        </div>
+
+        <div id="hack-unlocked-view" class="gtag-hidden">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:8px; color:#ff4444; margin-bottom:8px;">
+            <span id="hack-selected-label">TARGET: ALL</span>
+            <button class="gtag-btn hack-tab-btn" style="font-size:7px;" onclick="triggerRemoteHack('clear')">RESTORE TARGET</button>
+          </div>
+          <div class="gtag-chat-layout">
+            <div class="gtag-room-sidebar" style="border-color:#551a1a;">
+              <div class="gtag-sidebar-head"><span>ONLINE TARGETS</span></div>
+              <div id="hack-target-list" style="display:flex; flex-direction:column; gap:5px; max-height:200px; overflow-y:auto;"></div>
+            </div>
+            <div class="gtag-chat-main">
+              <div class="gtag-mod-grid" style="grid-template-columns:1fr; max-height:220px;">
+                <button id="hack-btn-screen" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('screen')">DISABLE SCREEN</button>
+                <button id="hack-btn-movement" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('movement')">FREEZE MOVEMENT</button>
+                <button id="hack-btn-invert" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('invert')">INVERT CONTROLS</button>
+                <button id="hack-btn-hud" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('hud')">HIJACK HUD MODS</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
       <div id="tab-settings" class="gtag-hidden">
         <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">KEYBINDS &amp; HUD MODULE LAYOUT</div>
         <div class="gtag-panel-box">
@@ -205,15 +245,15 @@
       <div id="tab-about" class="gtag-hidden">
         <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">SYSTEM INFORMATION // GORILLA OS</div>
         <div class="gtag-panel-box">
-          <div class="gtag-about-line"><span class="gtag-about-highlight">OS VERSION:</span> GORILLA OS v7.7 (WEB EDITION)</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">OS VERSION:</span> GORILLA OS v7.9 (WEB EDITION)</div>
           <div class="gtag-about-line"><span class="gtag-about-highlight">ACCOUNT STATUS:</span> <span id="about-account-status">GUEST</span></div>
-          <div class="gtag-about-line"><span class="gtag-about-highlight">TELEMETRY RELAY:</span> IDLE TIMEOUT (10M) &amp; OFFLINE BEACON</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">TELEMETRY RELAY:</span> GLOBAL VIP SFX, HACK TERMINAL &amp; OFFLINE BEACON</div>
           <div style="font-size:8px; color:#ffaa00; margin-top:8px;">CHANGELOG</div>
           <div class="gtag-changelog-box">
-            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.7]</span> STOPPED IDLE RELAY CONNECTIONS ON LOGIN SCREEN, ADDED SAVED GUEST DISPLAY NAMES (LOCALSTORAGE) &amp; 10-MIN INACTIVITY TIMEOUT.</div>
-            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.6]</span> FIXED GHOST LEADERBOARD ENTRIES ON LOAD, ADDED INSTANT TAB-CLOSE OFFLINE BEACON, INLINE VIP FLARE INPUT &amp; ABOUT CHANGELOG.</div>
-            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.5]</span> ADDED [★ VIP] VAULT TAB, TOP-CENTER VIP BROADCAST FLARES &amp; SILENT BACKEND GUEST RELAY (MONKE_XXXX).</div>
-            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.0]</span> ADDED 24 CLIENT MODS, SEPARATE GAME/MENU VOLUME SLIDERS, CUSTOM KEYBINDS &amp; DRAGGABLE HUD MODULES.</div>
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.9]</span> ADDED SECRET-CODE PROTECTED [HACK] TERMINAL WITH TARGET SELECTOR &amp; ON-SCREEN BREACH INDICATORS.</div>
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.8]</span> MADE SOUNDBOARD EFFECTS GLOBAL FOR ELEMENT VIP USERS VIA #STUMP-NETWORK-RANDOM.</div>
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.7]</span> STOPPED IDLE RELAY CONNECTIONS ON LOGIN SCREEN, ADDED SAVED GUEST DISPLAY NAMES &amp; 10-MIN INACTIVITY TIMEOUT.</div>
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.6]</span> FIXED GHOST LEADERBOARD ENTRIES ON LOAD, ADDED INSTANT TAB-CLOSE OFFLINE BEACON &amp; INLINE VIP FLARE INPUT.</div>
           </div>
         </div>
       </div>
@@ -224,7 +264,6 @@
   <script src="chat.js"></script>
   <script>
     (async function bootGorillaTagUnity() {
-      const buildDir = "Build"; // Change to "." if Unity files are in the root folder
       const statusEl = document.getElementById("gtag-load-status");
       const barEl = document.getElementById("gtag-bar-inner");
       const loadingScreen = document.getElementById("gtag-loading");
@@ -235,35 +274,46 @@
         if (statusEl && label) statusEl.textContent = label;
       }
 
+      if (window.location.protocol === "file:") {
+        setProgress(100, "ERROR: OPEN VIA GITHUB PAGES (HTTPS), NOT FILE://");
+        if (statusEl) statusEl.style.color = "#ff4444";
+        return;
+      }
+
       try {
         const chunks = [];
         for (let i = 1; i <= 8; i++) {
           setProgress((i / 8) * 60, `LOADING GAME DATA (${i}/8)...`);
-          const res = await fetch(`${buildDir}/gtagwebR2.data.unityweb.part${i}`);
-          if (!res.ok) throw new Error(`Missing data part ${i} (${res.status})`);
+          const res = await fetch(`Build/gtagwebR2.data.unityweb.part${i}`);
+          if (!res.ok) throw new Error(`Part ${i} HTTP ${res.status}`);
           chunks.push(await res.arrayBuffer());
         }
+
         const mergedDataUrl = URL.createObjectURL(new Blob(chunks, { type: "application/octet-stream" }));
         setProgress(65, "INITIALIZING UNITY LOADER...");
+
         await new Promise((resolve, reject) => {
           const s = document.createElement("script");
-          s.src = `${buildDir}/gtagwebR2.loader.js`;
+          s.src = "Build/gtagwebR2.loader.js";
           s.onload = resolve;
-          s.onerror = () => reject(new Error("Failed to load gtagwebR2.loader.js"));
+          s.onerror = () => reject(new Error("Failed to load Build/gtagwebR2.loader.js"));
           document.body.appendChild(s);
         });
+
         await createUnityInstance(canvas, {
           dataUrl: mergedDataUrl,
-          frameworkUrl: `${buildDir}/gtagwebR2.framework.js.unityweb`,
-          codeUrl: `${buildDir}/gtagwebR2.wasm.unityweb`,
+          frameworkUrl: "Build/gtag.framework.js",
+          codeUrl: "Build/gtagwebR2.wasm.unityweb",
           streamingAssetsUrl: "StreamingAssets",
           companyName: "Another Axiom",
           productName: "Gorilla Tag Web",
           productVersion: "1.0"
         }, p => setProgress(65 + Math.round(p * 35), `BOOTING MONKE ENGINE... ${65 + Math.round(p * 35)}%`));
+
         URL.revokeObjectURL(mergedDataUrl);
         loadingScreen?.classList.add("gtag-hidden");
       } catch (err) {
+        console.error(err);
         setProgress(100, `BOOT ERROR: ${err.message}`);
         if (statusEl) statusEl.style.color = "#ff4444";
       }
