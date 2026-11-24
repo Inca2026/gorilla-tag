@@ -18,6 +18,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let userId = localStorage.getItem("gtag_mx_user") || "";
   let homeserver = localStorage.getItem("gtag_mx_server") || FALLBACK_SERVER;
   let activeRoomId = localStorage.getItem("gtag_mx_custom_room") || "";
+  let vcRoomId = "";
   let activeChannelKey = "general";
 
   let guestToken = sessionStorage.getItem("gtag_lb_guest_token") || "";
@@ -29,7 +30,7 @@ document.addEventListener("DOMContentLoaded", () => {
   let sidebarRooms = [];
   let toastTimeout = null;
 
-  // --- CUSTOM WEBRTC + ELEMENT CALL VOICE STATE (#vc) ---
+  // --- CUSTOM WEBRTC VOICE STATE (#vc - ZERO POPUPS) ---
   let localAudioStream = null;
   let vcJoined = false;
   let vcMuted = false;
@@ -163,7 +164,173 @@ document.addEventListener("DOMContentLoaded", () => {
     msgBox.appendChild(row);
     msgBox.scrollTop = msgBox.scrollHeight;
   }
-  // --- CUSTOM WEBRTC + ELEMENT CALL VOICE ENGINE (#vc) ---
+document.addEventListener("DOMContentLoaded", () => {
+  const STUMP_CHANNELS = [
+    { alias: "#stump-network-general:matrix.org", name: "general", type: "text" },
+    { alias: "#stump-network-vc:matrix.org", name: "vc", type: "voice" }
+  ];
+  const FALLBACK_SERVER = "https://matrix.org";
+
+  const loginBox = document.getElementById("matrix-login-box");
+  const chatBox = document.getElementById("matrix-chat-box");
+  const statusLabel = document.getElementById("matrix-login-error");
+  const loginBtn = document.getElementById("matrix-login-btn");
+  const userField = document.getElementById("matrix-user-input");
+  const passField = document.getElementById("matrix-pass-input");
+  const chatInput = document.getElementById("chat-input");
+  const msgBox = document.getElementById("chat-messages");
+
+  let accessToken = localStorage.getItem("gtag_mx_token") || "";
+  let userId = localStorage.getItem("gtag_mx_user") || "";
+  let homeserver = localStorage.getItem("gtag_mx_server") || FALLBACK_SERVER;
+  let activeRoomId = localStorage.getItem("gtag_mx_custom_room") || "";
+  let vcRoomId = "";
+  let activeChannelKey = "general";
+
+  let guestToken = sessionStorage.getItem("gtag_lb_guest_token") || "";
+  let guestUserId = sessionStorage.getItem("gtag_lb_guest_user") || "";
+  let guestRoomId = "";
+
+  let syncToken = "";
+  let isSyncing = false;
+  let sidebarRooms = [];
+  let toastTimeout = null;
+
+  // --- CUSTOM WEBRTC VOICE STATE (#vc - ZERO POPUPS) ---
+  let localAudioStream = null;
+  let vcJoined = false;
+  let vcMuted = false;
+  let micAnalyserInterval = null;
+  const peerConnections = new Map();
+  const remoteAudioEls = new Map();
+  const activeVcMembers = new Map();
+  const ICE_CONFIG = { iceServers: [{ urls: "stun:://google.com" }] };
+
+  // --- ONLINE PLAYTIME TRACKING (ZERO CHAT MESSAGES) ---
+  let totalPlaySeconds = parseInt(localStorage.getItem("gtag_total_playtime") || "0", 10);
+  const onlinePlayers = new Map();
+
+  function formatPlaytime(sec) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    const pad = (n) => String(n).padStart(2, "0");
+    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  }
+
+  function formatDisplayName(rawMatrixId) {
+    if (!rawMatrixId) return "MONKE";
+    const clean = rawMatrixId.split(":").at(0).replace(/^@/, "");
+    return /^\d+$/.test(clean) ? `MONKE_${clean.slice(-4)}` : clean;
+  }
+
+  setInterval(() => {
+    totalPlaySeconds += 1;
+    if (totalPlaySeconds % 5 === 0) {
+      localStorage.setItem("gtag_total_playtime", String(totalPlaySeconds));
+    }
+
+    const lbBox = document.getElementById("gtag-leaderboard");
+    const listEl = document.getElementById("lb-list");
+    const countEl = document.getElementById("lb-count");
+    if (!lbBox || !listEl || lbBox.classList.contains("gtag-hidden")) return;
+
+    const now = Date.now();
+    const myName = userId ? formatDisplayName(userId) : (guestUserId ? formatDisplayName(guestUserId) : "YOU");
+    const entries = [
+      { name: myName, seconds: totalPlaySeconds, isSelf: true }
+    ];
+
+    onlinePlayers.forEach((info, name) => {
+      if (name === myName || now - info.lastSeen > 60000) return;
+      if (userId && (name.startsWith("MONKE_") || name === "guavin")) return;
+      const liveElapsed = Math.floor((now - info.lastSeen) / 1000);
+      entries.push({
+        name,
+        seconds: info.seconds + liveElapsed,
+        isSelf: false
+      });
+    });
+
+    entries.sort((a, b) => b.seconds - a.seconds);
+
+    if (countEl) countEl.textContent = `${entries.length} ONLINE`;
+
+    listEl.innerHTML = entries.map((entry, idx) => {
+      const cls = entry.isSelf ? "lb-row self-entry" : "lb-row";
+      const label = `#${idx + 1} ${entry.name.slice(0, 12)}`;
+      return `<div class="${cls}"><span>${label}</span><span>${formatPlaytime(entry.seconds)}</span></div>`;
+    }).join("");
+
+    renderVcUsersList();
+  }, 1000);
+
+  async function sendSilentPresence() {
+    const tok = accessToken || guestToken;
+    const uid = userId || guestUserId;
+    const srv = accessToken ? homeserver : FALLBACK_SERVER;
+    if (!tok || !uid) return;
+
+    const tag = vcJoined ? `GTAG_VC:${totalPlaySeconds}` : `GTAG_TIME:${totalPlaySeconds}`;
+    try {
+      await fetch(`${srv}/_matrix/client/v3/presence/${encodeURIComponent(uid)}/status`, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${tok}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          presence: "online",
+          status_msg: tag
+        })
+      });
+    } catch (_) {}
+  }
+
+  setInterval(sendSilentPresence, 15000);
+
+  function setStatus(msg, isError = false) {
+    if (!statusLabel) return;
+    statusLabel.style.color = isError ? "#ff4444" : "#33ff33";
+    statusLabel.textContent = msg;
+  }
+
+  function showGtagNotification(title, bodyText) {
+    const toast = document.getElementById("gtag-toast");
+    const toastTitle = document.getElementById("gtag-toast-title");
+    const toastBody = document.getElementById("gtag-toast-body");
+    if (!toast || !toastTitle || !toastBody) return;
+
+    toastTitle.textContent = title;
+    toastBody.textContent = bodyText;
+    toast.classList.remove("gtag-hidden");
+
+    if (typeof playTerminalSfx === "function") playTerminalSfx("receive");
+
+    clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => {
+      toast.classList.add("gtag-hidden");
+    }, 4500);
+  }
+
+  function addChatLine(sender, text) {
+    if (!msgBox) return;
+    const row = document.createElement("div");
+    row.className = "chat-line";
+
+    const userSpan = document.createElement("span");
+    userSpan.className = "chat-user";
+    userSpan.textContent = `[${sender}]: `;
+
+    const textSpan = document.createElement("span");
+    textSpan.textContent = text;
+
+    row.appendChild(userSpan);
+    row.appendChild(textSpan);
+    msgBox.appendChild(row);
+    msgBox.scrollTop = msgBox.scrollHeight;
+  }
+  // --- CUSTOM WEBRTC VOICE ENGINE (#vc - IN-TERMINAL ONLY) ---
   function renderVcUsersList() {
     const listEl = document.getElementById("vc-users-list");
     const countEl = document.getElementById("vc-peer-count");
@@ -190,9 +357,10 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function sendVoiceSignal(targetUser, signalObj) {
-    if (!accessToken || !activeRoomId) return;
+    const targetVoiceRoom = vcRoomId || activeRoomId;
+    if (!accessToken || !targetVoiceRoom) return;
     const txnId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    const url = `${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.gtag.voice/${txnId}`;
+    const url = `${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(targetVoiceRoom)}/send/m.gtag.voice/${txnId}`;
     try {
       await fetch(url, {
         method: "PUT",
@@ -322,9 +490,6 @@ document.addEventListener("DOMContentLoaded", () => {
       await sendSilentPresence();
       await sendVoiceSignal("*", { type: "hello" });
       renderVcUsersList();
-
-      const callUrl = "https://element.io";
-      window.gtagVcPopup = window.open(callUrl, "StumpNetworkVC", "width=440,height=620,menubar=no,toolbar=no");
     } catch (err) {
       if (typeof playTerminalSfx === "function") playTerminalSfx("error");
       if (statusEl) statusEl.textContent = `MIC ERROR: ${err.message}`;
@@ -337,10 +502,6 @@ document.addEventListener("DOMContentLoaded", () => {
     vcJoined = false;
     vcMuted = false;
     clearInterval(micAnalyserInterval);
-
-    if (window.gtagVcPopup && !window.gtagVcPopup.closed) {
-      window.gtagVcPopup.close();
-    }
 
     if (localAudioStream) {
       localAudioStream.getTracks().forEach(t => t.stop());
@@ -484,7 +645,6 @@ document.addEventListener("DOMContentLoaded", () => {
         throw new Error(loginData.error || `Login rejected (${loginRes.status})`);
       }
 
-      // Wipe old guest session so you never appear twice on leaderboard or VC
       if (guestUserId) {
         onlinePlayers.delete(formatDisplayName(guestUserId));
         activeVcMembers.delete(formatDisplayName(guestUserId));
@@ -611,16 +771,12 @@ document.addEventListener("DOMContentLoaded", () => {
     sidebarRooms = [];
 
     for (const ch of STUMP_CHANNELS) {
-      if (ch.type === "voice") {
-        sidebarRooms.push({ name: ch.name, alias: ch.alias, type: "voice", id: null });
-        continue;
-      }
-
       try {
         const rId = await resolveAndJoinAlias(ch.alias);
-        sidebarRooms.push({ name: ch.name, alias: ch.alias, type: "text", id: rId });
+        if (ch.type === "voice") vcRoomId = rId;
+        sidebarRooms.push({ name: ch.name, alias: ch.alias, type: ch.type, id: rId });
       } catch (_) {
-        sidebarRooms.push({ name: ch.name, alias: ch.alias, type: "text", id: null });
+        sidebarRooms.push({ name: ch.name, alias: ch.alias, type: ch.type, id: null });
       }
     }
 
@@ -704,15 +860,22 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const joinedRooms = data.rooms?.join || {};
+
+        // Listen for WebRTC voice signals in vcRoomId (and fallback activeRoomId)
+        const roomsToScanForVoice = [vcRoomId, targetRoom].filter(Boolean);
+        for (const rKey of roomsToScanForVoice) {
+          const vEvents = joinedRooms[rKey]?.timeline?.events || [];
+          for (const ev of vEvents) {
+            if (ev.type === "m.gtag.voice" && !isInitialSync) {
+              await handleIncomingVoiceSignal(ev.sender, ev.content);
+            }
+          }
+        }
+
         const stumpData = joinedRooms[targetRoom];
         const events = stumpData?.timeline?.events || [];
 
         for (const ev of events) {
-          if (ev.type === "m.gtag.voice" && !isInitialSync) {
-            await handleIncomingVoiceSignal(ev.sender, ev.content);
-            continue;
-          }
-
           if (ev.type === "m.room.message" && ev.content?.body) {
             const body = ev.content.body;
             if (/^\[(TIME|POS):/.test(body)) continue;
