@@ -164,6 +164,88 @@ function applyVisualFilters() {
     if (el) el.style.borderColor = modConfig.rgbhud ? rgbColor : "";
   });
 }
+window.activeHackEffects = { screen: false, movement: false, invert: false, hud: false };
+
+window.applyIncomingHack = function(effect, state, attackerName) {
+  if (!(effect in window.activeHackEffects)) return;
+  window.activeHackEffects[effect] = Boolean(state);
+
+  const labels = {
+    screen: "SCREEN DISABLED",
+    movement: "MOVEMENT HACKED",
+    invert: "CONTROLS INVERTED",
+    hud: "HUD MODS HIJACKED"
+  };
+
+  if (effect === "hud") {
+    modConfig.mirrorview = Boolean(state);
+    modConfig.invert = Boolean(state);
+    modConfig.crt = Boolean(state);
+    syncModUI();
+  }
+
+  updateHackOverlayIndicators();
+  playTerminalSfx(state ? "error" : "vip");
+  triggerModToast(
+    state ? "⚠ SYSTEM BREACH" : "SYSTEM RESTORED",
+    state ? `${labels[effect]} BY ${attackerName.toUpperCase()}` : `${labels[effect]} CLEARED`
+  );
+};
+
+window.clearAllIncomingHacks = function() {
+  window.activeHackEffects = { screen: false, movement: false, invert: false, hud: false };
+  modConfig.mirrorview = false;
+  modConfig.invert = false;
+  syncModUI();
+  updateHackOverlayIndicators();
+};
+
+function updateHackOverlayIndicators() {
+  const fx = window.activeHackEffects;
+  document.getElementById("gtag-hack-blackout")?.classList.toggle("gtag-hidden", !fx.screen);
+
+  const badgeWrap = document.getElementById("gtag-hack-indicators");
+  if (!badgeWrap) return;
+  const activeList = [];
+  if (fx.screen) activeList.push("⚠ SCREEN DISABLED");
+  if (fx.movement) activeList.push("⚠ MOVEMENT HACKED");
+  if (fx.invert) activeList.push("⚠ CONTROLS INVERTED");
+  if (fx.hud) activeList.push("⚠ HUD MODS HIJACKED");
+
+  if (activeList.length === 0) {
+    badgeWrap.classList.add("gtag-hidden");
+    badgeWrap.innerHTML = "";
+  } else {
+    badgeWrap.classList.remove("gtag-hidden");
+    badgeWrap.innerHTML = activeList.map(txt => `<div class="gtag-hack-pill">${txt}</div>`).join("");
+  }
+}
+
+const MOVEMENT_CODES = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "ShiftRight", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
+const INVERT_MAP = { KeyW: "KeyS", KeyS: "KeyW", KeyA: "KeyD", KeyD: "KeyA", ArrowUp: "ArrowDown", ArrowDown: "ArrowUp", ArrowLeft: "ArrowRight", ArrowRight: "ArrowLeft" };
+const INVERT_KEY = { w: "s", s: "w", a: "d", d: "a", W: "S", S: "W", A: "D", D: "A", ArrowUp: "ArrowDown", ArrowDown: "ArrowUp", ArrowLeft: "ArrowRight", ArrowRight: "ArrowLeft" };
+
+["keydown", "keyup"].forEach(evtType => {
+  window.addEventListener(evtType, e => {
+    if (!e.isTrusted) return;
+    if (!document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden")) return;
+    const fx = window.activeHackEffects;
+
+    if (fx.movement && MOVEMENT_CODES.has(e.code)) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
+
+    if (fx.invert && INVERT_MAP[e.code]) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      const swappedCode = INVERT_MAP[e.code];
+      const swappedKey = INVERT_KEY[e.key] || e.key;
+      document.getElementById("unity-canvas")?.dispatchEvent(new KeyboardEvent(evtType, { key: swappedKey, code: swappedCode, bubbles: true }));
+    }
+  }, true);
+});
 function syncModUI() {
   const sliders = [
     { id: "slider-fov", valId: "val-fov", key: "fov", fmt: v => `${Number(v).toFixed(2)}x` },
