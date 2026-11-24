@@ -39,9 +39,10 @@ window.loginElementAccount = async function() {
 
     if (cleanUser.includes(':')) {
       const parts = cleanUser.split(':');
-      cleanUser = parts[0];
-      if (parts[1] && parts[1].toLowerCase() !== 'matrix.org') {
-        activeHomeserver = `https://${parts[1]}`;
+      cleanUser = parts.at(0);
+      const serverDomain = parts.at(1);
+      if (serverDomain && serverDomain.toLowerCase() !== 'matrix.org') {
+        activeHomeserver = `https://${serverDomain}`;
       }
     }
 
@@ -146,7 +147,7 @@ async function pollStumpMessages() {
       const roomTimeline = data.rooms?.join?.[STUMP_ROOM_ID]?.timeline?.events || [];
       for (const ev of roomTimeline) {
         if (ev.type === "m.room.message" && ev.content?.body) {
-          const shortUser = ev.sender.split(':')[0].replace('@', '');
+          const shortUser = ev.sender.split(':').at(0).replace('@', '');
           appendMessage(shortUser, ev.content.body);
         }
       }
