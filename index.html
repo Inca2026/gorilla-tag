@@ -38,6 +38,10 @@
     <div style="font-size:8px; color:#ff8888;">GORILLA OS DISPLAY OVERRIDDEN BY REMOTE TERMINAL</div>
   </div>
   <div id="gtag-hack-indicators" class="gtag-hidden"></div>
+  <div id="gtag-puppet-banner" class="gtag-hidden">
+    <span id="puppet-target-name">PUPPETEERING: PLAYER [ESC TO STOP]</span>
+    <button class="gtag-btn hack-tab-btn" onclick="stopPuppetControl()">STOP</button>
+  </div>
 
   <div id="gtag-hud-edit-banner" class="gtag-hidden">
     <span>DRAG ANY HUD MODULE TO REPOSITION</span>
@@ -52,7 +56,7 @@
   <div id="gtag-overlay" class="gtag-hidden">
     <div class="gtag-terminal">
       <div class="gtag-header">
-        <span>GORILLA OS v7.9</span>
+        <span>GORILLA OS v8.0</span>
         <div style="display:flex; gap:4px; flex-wrap:wrap;">
           <button id="btn-tab-chat" class="gtag-btn active" onclick="switchTab('chat')">CHAT</button>
           <button id="btn-tab-sounds" class="gtag-btn" onclick="switchTab('sounds')">SOUNDS</button>
@@ -220,6 +224,7 @@
                 <button id="hack-btn-movement" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('movement')">FREEZE MOVEMENT</button>
                 <button id="hack-btn-invert" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('invert')">INVERT CONTROLS</button>
                 <button id="hack-btn-hud" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('hud')">HIJACK HUD MODS</button>
+                <button id="hack-btn-puppet" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('puppet')">CONTROL PLAYER</button>
               </div>
             </div>
           </div>
@@ -245,15 +250,15 @@
       <div id="tab-about" class="gtag-hidden">
         <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">SYSTEM INFORMATION // GORILLA OS</div>
         <div class="gtag-panel-box">
-          <div class="gtag-about-line"><span class="gtag-about-highlight">OS VERSION:</span> GORILLA OS v7.9 (WEB EDITION)</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">OS VERSION:</span> GORILLA OS v8.0 (WEB EDITION)</div>
           <div class="gtag-about-line"><span class="gtag-about-highlight">ACCOUNT STATUS:</span> <span id="about-account-status">GUEST</span></div>
-          <div class="gtag-about-line"><span class="gtag-about-highlight">TELEMETRY RELAY:</span> GLOBAL VIP SFX, HACK TERMINAL &amp; OFFLINE BEACON</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">TELEMETRY RELAY:</span> GLOBAL VIP SFX, PUPPET HACKS &amp; OFFLINE BEACON</div>
           <div style="font-size:8px; color:#ffaa00; margin-top:8px;">CHANGELOG</div>
           <div class="gtag-changelog-box">
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v8.0]</span> ADDED REMOTE PLAYER PUPPET CONTROL TO [HACK] TERMINAL &amp; FIXED HELD-KEY RELEASE ON MOVEMENT FREEZE.</div>
             <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.9]</span> ADDED SECRET-CODE PROTECTED [HACK] TERMINAL WITH TARGET SELECTOR &amp; ON-SCREEN BREACH INDICATORS.</div>
             <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.8]</span> MADE SOUNDBOARD EFFECTS GLOBAL FOR ELEMENT VIP USERS VIA #STUMP-NETWORK-RANDOM.</div>
             <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.7]</span> STOPPED IDLE RELAY CONNECTIONS ON LOGIN SCREEN, ADDED SAVED GUEST DISPLAY NAMES &amp; 10-MIN INACTIVITY TIMEOUT.</div>
-            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.6]</span> FIXED GHOST LEADERBOARD ENTRIES ON LOAD, ADDED INSTANT TAB-CLOSE OFFLINE BEACON &amp; INLINE VIP FLARE INPUT.</div>
           </div>
         </div>
       </div>
