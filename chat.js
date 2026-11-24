@@ -22,7 +22,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let backendRandomRoomId = "";
   let activeChannelKey = "general";
 
-  // @meebo:matrix.org is used strictly as an invisible backend transport; guests appear as random MONKE_XXXX
   let guestToken = sessionStorage.getItem("gtag_guest_token") || "";
   let guestBotId = sessionStorage.getItem("gtag_guest_bot_id") || "";
   let guestName = sessionStorage.getItem("gtag_guest_nick") || "";
@@ -129,7 +128,6 @@ document.addEventListener("DOMContentLoaded", () => {
     msgBox.scrollTop = msgBox.scrollHeight;
   }
 
-  // Parses either a real Element message or a backend-relayed [GUEST:MONKE_XXXX] message
   function parseIncomingMessage(senderId, rawBody) {
     if (rawBody.startsWith("[GUEST:")) {
       const endBracket = rawBody.indexOf("]");
@@ -461,7 +459,6 @@ document.addEventListener("DOMContentLoaded", () => {
     const srv = accessToken ? homeserver : FALLBACK_SERVER;
     if (!tok || !text || !activeRoomId) return;
 
-    // Guests transmit through @meebo silently but appear publicly as [GUEST:MONKE_XXXX]
     const outboundBody = isGuestMode ? `[GUEST:${guestName}] ${text}` : text;
     const txnId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const res = await fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.room.message/${txnId}`, {
@@ -476,13 +473,21 @@ document.addEventListener("DOMContentLoaded", () => {
   window.sendVipBroadcastFlare = async function() {
     if (!accessToken) return triggerModToast("VIP ONLY", "ELEMENT ACCOUNT REQUIRED!");
     if (!backendRandomRoomId) return triggerModToast("RELAY ERROR", "NOT CONNECTED TO #STUMP-NETWORK-RANDOM!");
-    const shout = prompt("Send a top-screen VIP Flare announcement through #stump-network-random:");
-    if (!shout?.trim()) return;
+
+    const flareInput = document.getElementById("vip-flare-input");
+    const shout = flareInput?.value.trim() || "";
+    if (!shout) {
+      playTerminalSfx?.("error");
+      flareInput?.focus();
+      return triggerModToast("EMPTY FLARE", "TYPE A MESSAGE TO BROADCAST FIRST!");
+    }
+
+    flareInput.value = "";
     triggerModToast("TRANSMITTING FLARE...", "ROUTING THROUGH #STUMP-NETWORK-RANDOM...");
     const res = await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/flare_${Date.now()}`, {
       method: "PUT",
       headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ msgtype: "m.notice", body: `[VIP_FLARE]${shout.trim().slice(0, 85)}` })
+      body: JSON.stringify({ msgtype: "m.notice", body: `[VIP_FLARE]${shout.slice(0, 85)}` })
     }).catch(() => null);
     if (!res?.ok) { playTerminalSfx?.("error"); triggerModToast("FLARE FAILED", `MATRIX REJECTED (${res?.status || "NET"})`); }
   };
