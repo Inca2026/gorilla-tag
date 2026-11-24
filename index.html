@@ -6,7 +6,7 @@
   <title>Gorilla Tag Web</title>
   <link rel="preconnect" href="https://googleapis.com" />
   <link href="https://googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=8" />
+  <link rel="stylesheet" href="style.css?v=9" />
 </head>
 <body>
   <div id="unity-container">
@@ -22,6 +22,10 @@
   <div id="gtag-vignette" class="gtag-hidden"></div>
   <div id="gtag-speedlines" class="gtag-hidden"></div>
   <div id="gtag-cinematic" class="gtag-hidden"><div class="gtag-bar-top"></div><div class="gtag-bar-bottom"></div></div>
+  <div id="gtag-camcorder-overlay" class="gtag-hidden">
+    <div class="cam-top-row"><span class="cam-rec-dot">● REC</span><span>[BAT 84% ▮▮▮▯]</span></div>
+    <div class="cam-bot-row"><span>SP // 16:9</span><span id="camcorder-timecode">00:00:00</span></div>
+  </div>
 
   <div id="gtag-keystrokes" class="gtag-hidden" title="Drag to move">
     <div></div><div class="gtag-key-cap" data-key="W">W</div><div></div>
@@ -38,11 +42,11 @@
     <div style="font-size:8px; color:#ff8888;">GORILLA OS DISPLAY OVERRIDDEN BY REMOTE TERMINAL</div>
   </div>
   <div id="gtag-hack-indicators" class="gtag-hidden"></div>
+  <div id="gtag-breach-banner" class="gtag-hidden"><span id="breach-banner-text">⚠ BREACH MODE // NEXT RANDOM HACK IN 30S</span></div>
   <div id="gtag-puppet-banner" class="gtag-hidden">
     <span id="puppet-target-name">PUPPETEERING: PLAYER [ESC TO STOP]</span>
     <button class="gtag-btn hack-tab-btn" onclick="stopPuppetControl()">STOP</button>
   </div>
-
   <div id="gtag-hud-edit-banner" class="gtag-hidden">
     <span>DRAG ANY HUD MODULE TO REPOSITION</span>
     <button class="gtag-btn" onclick="toggleHudEditMode(false)">DONE</button>
@@ -56,7 +60,7 @@
   <div id="gtag-overlay" class="gtag-hidden">
     <div class="gtag-terminal">
       <div class="gtag-header">
-        <span>GORILLA OS v8.0</span>
+        <span>GORILLA OS v8.1</span>
         <div style="display:flex; gap:4px; flex-wrap:wrap;">
           <button id="btn-tab-chat" class="gtag-btn active" onclick="switchTab('chat')">CHAT</button>
           <button id="btn-tab-sounds" class="gtag-btn" onclick="switchTab('sounds')">SOUNDS</button>
@@ -67,6 +71,7 @@
           <button id="btn-tab-about" class="gtag-btn" onclick="switchTab('about')">ABOUT</button>
         </div>
       </div>
+
       <div id="tab-chat">
         <div id="matrix-login-box" class="gtag-panel-box">
           <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">SIGN IN WITH ELEMENT FOR [★ VIP] MODS &amp; CHAT</div>
@@ -113,7 +118,6 @@
           </div>
         </div>
       </div>
-
       <div id="tab-sounds" class="gtag-hidden">
         <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">MONKE SOUNDBOARD // ELEMENT VIP SOUNDS PLAY GLOBALLY!</div>
         <div class="gtag-mod-grid" style="max-height:260px;">
@@ -128,13 +132,21 @@
           <button class="gtag-btn" onclick="playMonkeSound('shinyrock')"> [★] SHINY ROCK CHIME</button>
         </div>
       </div>
+
       <div id="tab-mods" class="gtag-hidden">
-        <div style="display:flex; justify-content:space-between; align-items:center; font-size:8px; margin-bottom:8px;">
-          <span>STANDARD MOD MENU</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:8px; margin-bottom:6px;">
+          <span>MOD PRESETS &amp; VISUALS</span>
           <div style="display:flex; gap:6px;">
             <button class="gtag-btn" style="font-size:7px;" onclick="saveModConfig()">SAVE CONFIG</button>
             <button class="gtag-btn" style="font-size:7px;" onclick="resetAllMods()">RESET</button>
           </div>
+        </div>
+        <div style="display:flex; gap:5px; flex-wrap:wrap; margin-bottom:8px;">
+          <button class="gtag-btn" style="font-size:7px;" onclick="applyModPreset('camcorder')">CAMCORDER</button>
+          <button class="gtag-btn" style="font-size:7px;" onclick="applyModPreset('horror')">VHS HORROR</button>
+          <button class="gtag-btn" style="font-size:7px;" onclick="applyModPreset('gameboy')">GAMEBOY</button>
+          <button class="gtag-btn" style="font-size:7px;" onclick="applyModPreset('cyberpunk')">CYBERPUNK</button>
+          <button class="gtag-btn" style="font-size:7px;" onclick="applyModPreset('clear')">CLEAR PRESET</button>
         </div>
         <div class="gtag-slider-box">
           <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>FOV ZOOM</span><span id="val-fov">1.00x</span></div><input id="slider-fov" type="range" min="0.7" max="1.6" step="0.05" value="1.0" oninput="updateSliderMod('fov', this.value)"></div>
@@ -144,9 +156,11 @@
           <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>GAME VOLUME</span><span id="val-gamevol">100%</span></div><input id="slider-gamevol" type="range" min="0" max="100" step="1" value="100" oninput="updateSliderMod('gameVol', this.value)"></div>
           <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>MENU VOLUME</span><span id="val-menuvol">100%</span></div><input id="slider-menuvol" type="range" min="0" max="100" step="1" value="100" oninput="updateSliderMod('menuVol', this.value)"></div>
         </div>
-        <div class="gtag-mod-grid">
+        <div class="gtag-mod-grid" style="max-height:150px;">
           <button id="mod-leaderboard" class="gtag-btn" onclick="toggleMod('leaderboard')">LEADERBOARD: ON</button>
+          <button id="mod-hudhint" class="gtag-btn" onclick="toggleMod('hudhint')">HUD HINT: ON</button>
           <button id="mod-termsfx" class="gtag-btn" onclick="toggleMod('termsfx')">TERMINAL SFX: ON</button>
+          <button id="mod-camcorder" class="gtag-btn" onclick="toggleMod('camcorder')">CAMCORDER HUD: OFF</button>
           <button id="mod-nightvision" class="gtag-btn" onclick="toggleMod('nightvision')">NIGHT VISION: OFF</button>
           <button id="mod-lavavision" class="gtag-btn" onclick="toggleMod('lavavision')">LAVA VISION: OFF</button>
           <button id="mod-blueprint" class="gtag-btn" onclick="toggleMod('blueprint')">BLUEPRINT WIRE: OFF</button>
@@ -166,23 +180,34 @@
           <button class="gtag-btn" onclick="clearUnityCosmetics()">UNSTUCK HAT</button>
         </div>
       </div>
-
       <div id="tab-vip" class="gtag-hidden">
         <div id="vip-locked-view" class="gtag-vip-lock-card">
           <div style="font-size:10px; color:#ffaa00; margin-bottom:10px;">[★] ELEMENT ACCOUNT REQUIRED</div>
           <div style="font-size:8px; line-height:1.8; color:#ddd; margin-bottom:14px;">
-            GUEST ACCOUNTS CANNOT ACCESS THE VIP VAULT. SIGN IN WITH A FREE ELEMENT / MATRIX ACCOUNT IN THE CHAT TAB TO UNLOCK 10 EXCLUSIVE MODS, GLOBAL BROADCAST FLARES, AND VIP SOUNDS!
+            GUEST ACCOUNTS CANNOT ACCESS THE VIP VAULT. SIGN IN WITH A FREE ELEMENT / MATRIX ACCOUNT IN THE CHAT TAB TO UNLOCK EXCLUSIVE MODS, CUSTOM GAME MODES, AND GLOBAL VIP SOUNDS!
           </div>
           <button class="gtag-btn vip-tab-btn" onclick="switchTab('chat')">GO TO ELEMENT SIGN IN</button>
         </div>
         <div id="vip-unlocked-view" class="gtag-hidden">
-          <div style="font-size:8px; color:#ffaa00; margin-bottom:8px;">[★] ELEMENT VIP EXCLUSIVE MODS</div>
-          <div class="gtag-input-row" style="margin-bottom:10px;">
+          <div style="font-size:8px; color:#ffaa00; margin-bottom:6px;">[★] ELEMENT VIP EXCLUSIVE MODS &amp; GAME MODES</div>
+          <div class="gtag-input-row" style="margin-bottom:8px;">
             <span style="color:#ffaa00; font-size:9px;">★&gt;</span>
             <input id="vip-flare-input" type="text" maxlength="85" placeholder="TYPE TOP-SCREEN VIP FLARE..." />
             <button class="gtag-btn vip-tab-btn" style="font-size:7px; white-space:nowrap;" onclick="sendVipBroadcastFlare()">SEND VIP FLARE</button>
           </div>
-          <div class="gtag-mod-grid" style="max-height:225px;">
+          <div style="border:1px solid #553c00; background:#141005; padding:8px; margin-bottom:8px; display:flex; flex-direction:column; gap:6px;">
+            <div style="display:flex; justify-content:space-between; align-items:center;">
+              <span style="font-size:7.5px; color:#ffdd44;">CUSTOM GAME MODE // BREACH (AUTO RANDOM HACK)</span>
+              <button id="btn-gamemode-breach" class="gtag-btn vip-tab-btn" style="font-size:7px;" onclick="toggleBreachGameMode()">BREACH: OFF</button>
+            </div>
+            <div style="display:flex; align-items:center; gap:8px; font-size:7px; color:#ffaa00;">
+              <span>HACK INTERVAL:</span>
+              <input id="slider-breach-freq" type="range" min="5" max="60" step="5" value="30" style="flex:1;" oninput="updateBreachFrequency(this.value)" />
+              <span id="val-breach-freq">30S</span>
+            </div>
+          </div>
+          <div class="gtag-mod-grid" style="max-height:165px;">
+            <button id="mod-shifttoggle" class="gtag-btn" onclick="toggleMod('shifttoggle')">HOLD SHIFT TOGGLE: OFF</button>
             <button id="mod-rgbcrosshair" class="gtag-btn" onclick="toggleMod('rgbcrosshair')">RGB RETICLE: OFF</button>
             <button id="mod-goldenui" class="gtag-btn" onclick="toggleMod('goldenui')">GOLD TERMINAL: OFF</button>
             <button id="mod-chatnotify" class="gtag-btn" onclick="toggleMod('chatnotify')">CHAT PING SFX: OFF</button>
@@ -196,7 +221,6 @@
           </div>
         </div>
       </div>
-
       <div id="tab-hack" class="gtag-hidden">
         <div id="hack-locked-view" class="gtag-panel-box" style="border-color:#ff4444; text-align:center; padding:16px;">
           <div style="font-size:9px; color:#ff4444; margin-bottom:10px;">⚠ MONKE HACK TERMINAL // CLASSIFIED</div>
@@ -213,18 +237,27 @@
             <span id="hack-selected-label">TARGET: ALL</span>
             <button class="gtag-btn hack-tab-btn" style="font-size:7px;" onclick="triggerRemoteHack('clear')">RESTORE TARGET</button>
           </div>
-          <div class="gtag-chat-layout">
+          <div class="gtag-chat-layout" style="height:275px;">
             <div class="gtag-room-sidebar" style="border-color:#551a1a;">
               <div class="gtag-sidebar-head"><span>ONLINE TARGETS</span></div>
-              <div id="hack-target-list" style="display:flex; flex-direction:column; gap:5px; max-height:200px; overflow-y:auto;"></div>
+              <div id="hack-target-list" style="display:flex; flex-direction:column; gap:5px; overflow-y:auto;"></div>
             </div>
-            <div class="gtag-chat-main">
-              <div class="gtag-mod-grid" style="grid-template-columns:1fr; max-height:220px;">
+            <div class="gtag-chat-main" style="overflow-y:auto; gap:6px;">
+              <div class="gtag-mod-grid" style="grid-template-columns:1fr; max-height:145px;">
                 <button id="hack-btn-screen" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('screen')">DISABLE SCREEN</button>
                 <button id="hack-btn-movement" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('movement')">FREEZE MOVEMENT</button>
                 <button id="hack-btn-invert" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('invert')">INVERT CONTROLS</button>
-                <button id="hack-btn-hud" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('hud')">HIJACK HUD MODS</button>
                 <button id="hack-btn-puppet" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('puppet')">CONTROL PLAYER</button>
+              </div>
+              <div style="border:1px solid #551a1a; background:#140707; padding:6px;">
+                <div style="font-size:7px; color:#ff6666; margin-bottom:5px;">TOGGLE TARGET HUD ELEMENTS:</div>
+                <div style="display:flex; flex-wrap:wrap; gap:4px;">
+                  <button id="hack-hud-leaderboard" class="gtag-btn hack-tab-btn" style="font-size:6.5px; padding:5px;" onclick="triggerRemoteHudElement('leaderboard')">LEADERBOARD</button>
+                  <button id="hack-hud-keystrokes" class="gtag-btn hack-tab-btn" style="font-size:6.5px; padding:5px;" onclick="triggerRemoteHudElement('keystrokes')">KEYSTROKES</button>
+                  <button id="hack-hud-hudhint" class="gtag-btn hack-tab-btn" style="font-size:6.5px; padding:5px;" onclick="triggerRemoteHudElement('hudhint')">HUD HINT</button>
+                  <button id="hack-hud-mirrorview" class="gtag-btn hack-tab-btn" style="font-size:6.5px; padding:5px;" onclick="triggerRemoteHudElement('mirrorview')">MIRROR</button>
+                  <button id="hack-hud-invert" class="gtag-btn hack-tab-btn" style="font-size:6.5px; padding:5px;" onclick="triggerRemoteHudElement('invert')">INVERT</button>
+                </div>
               </div>
             </div>
           </div>
@@ -250,23 +283,23 @@
       <div id="tab-about" class="gtag-hidden">
         <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">SYSTEM INFORMATION // GORILLA OS</div>
         <div class="gtag-panel-box">
-          <div class="gtag-about-line"><span class="gtag-about-highlight">OS VERSION:</span> GORILLA OS v8.0 (WEB EDITION)</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">OS VERSION:</span> GORILLA OS v8.1 (WEB EDITION)</div>
           <div class="gtag-about-line"><span class="gtag-about-highlight">ACCOUNT STATUS:</span> <span id="about-account-status">GUEST</span></div>
-          <div class="gtag-about-line"><span class="gtag-about-highlight">TELEMETRY RELAY:</span> GLOBAL VIP SFX, PUPPET HACKS &amp; OFFLINE BEACON</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">TELEMETRY RELAY:</span> BREACH MODE, PUPPET HACKS &amp; GLOBAL VIP SFX</div>
           <div style="font-size:8px; color:#ffaa00; margin-top:8px;">CHANGELOG</div>
           <div class="gtag-changelog-box">
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v8.1]</span> ADDED VIP HOLD SHIFT TOGGLE, CAMCORDER/HORROR/CYBERPUNK MOD PRESETS, AUTOMATIC VIP BREACH GAME MODE WITH FREQUENCY SLIDER &amp; INDIVIDUAL TARGET HUD TOGGLES.</div>
             <div class="gtag-log-entry"><span class="gtag-log-ver">[v8.0]</span> ADDED REMOTE PLAYER PUPPET CONTROL TO [HACK] TERMINAL &amp; FIXED HELD-KEY RELEASE ON MOVEMENT FREEZE.</div>
             <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.9]</span> ADDED SECRET-CODE PROTECTED [HACK] TERMINAL WITH TARGET SELECTOR &amp; ON-SCREEN BREACH INDICATORS.</div>
             <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.8]</span> MADE SOUNDBOARD EFFECTS GLOBAL FOR ELEMENT VIP USERS VIA #STUMP-NETWORK-RANDOM.</div>
-            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.7]</span> STOPPED IDLE RELAY CONNECTIONS ON LOGIN SCREEN, ADDED SAVED GUEST DISPLAY NAMES &amp; 10-MIN INACTIVITY TIMEOUT.</div>
           </div>
         </div>
       </div>
     </div>
   </div>
-  <script src="soundboard.js?v=8"></script>
-  <script src="ui-keybinds.js?v=8"></script>
-  <script src="chat.js?v=8"></script>
+  <script src="soundboard.js?v=9"></script>
+  <script src="ui-keybinds.js?v=9"></script>
+  <script src="chat.js?v=9"></script>
   <script>
     (async function bootGorillaTagUnity() {
       const statusEl = document.getElementById("gtag-load-status");
@@ -291,7 +324,7 @@
           setProgress(((i - 1) / 8) * 60 + 3, `DOWNLOADING GAME DATA (${i}/8)...`);
           const ctrl = new AbortController();
           const timer = setTimeout(() => ctrl.abort(), 25000);
-          const res = await fetch(`Build/gtagwebR2.data.unityweb.part${i}?v=8`, { signal: ctrl.signal });
+          const res = await fetch(`Build/gtagwebR2.data.unityweb.part${i}?v=9`, { signal: ctrl.signal });
           clearTimeout(timer);
           if (!res.ok) throw new Error(`Part ${i} HTTP ${res.status}`);
           chunks.push(await res.arrayBuffer());
@@ -302,7 +335,7 @@
 
         await new Promise((resolve, reject) => {
           const s = document.createElement("script");
-          s.src = "Build/gtagwebR2.loader.js?v=8";
+          s.src = "Build/gtagwebR2.loader.js?v=9";
           s.onload = resolve;
           s.onerror = () => reject(new Error("Failed to load Build/gtagwebR2.loader.js"));
           document.body.appendChild(s);
