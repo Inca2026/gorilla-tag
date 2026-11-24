@@ -1,4 +1,3 @@
-// BUILT-IN WEB AUDIO MONKE SOUNDBOARD, GLOBAL VIP SFX, VOLUME HOOKS & SAVABLE CLIENT MODS
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const originalGainConnect = GainNode.prototype.connect;
 const gameGainNodes = new WeakSet();
@@ -55,14 +54,12 @@ const VIP_ONLY_SOUNDS = new Set(['banshee', 'airhorn', 'shinyrock']);
 
 function playMonkeSound(sound, isRemote = false) {
   if (!isRemote && VIP_ONLY_SOUNDS.has(sound) && !isElementLoggedIn()) {
-    return triggerModToast("ELEMENT LOCKED", "SIGN IN WITH ELEMENT FOR VIP SOUNDS!");
+    return triggerModToast("VIP LOCKED", "SIGN IN WITH ELEMENT OR RENT BANANA VIP!");
   }
-
-  if (!isRemote && isElementLoggedIn() && typeof window.broadcastGlobalSound === "function") {
+  if (!isRemote && localStorage.getItem("gtag_mx_token") && typeof window.broadcastGlobalSound === "function") {
     window.broadcastGlobalSound(sound);
     return;
   }
-
   if (sound === 'tag') { playTone(180, 'sawtooth', 0.12, 0, 60); playTone(520, 'square', 0.18, 0.08, 380); }
   else if (sound === 'roundstart') { playTone(440, 'square', 0.15, 0); playTone(440, 'square', 0.15, 0.25); playTone(440, 'square', 0.15, 0.5); playTone(880, 'sawtooth', 0.4, 0.75); }
   else if (sound === 'monke') { playTone(320, 'triangle', 0.14, 0, 480); playTone(340, 'triangle', 0.14, 0.18, 500); playTone(620, 'sawtooth', 0.28, 0.36, 260); }
@@ -78,12 +75,12 @@ window.playMonkeSound = playMonkeSound;
 window.STUMP_RANDOM_ROOM = "#stump-network-random:matrix.org";
 
 function isElementLoggedIn() {
-  return Boolean(localStorage.getItem("gtag_mx_token") || window.isMatrixConnected);
+  const hasBananaVip = Date.now() < parseInt(localStorage.getItem("gtag_banana_vip_exp") || "0", 10);
+  return Boolean(localStorage.getItem("gtag_mx_token") || window.isMatrixConnected || hasBananaVip);
 }
-
 const DEFAULT_MOD_CONFIG = {
   fov: 1.0, sat: 100, bright: 100, contrast: 100, gameVol: 100, menuVol: 100,
-  leaderboard: true, termsfx: true, nightvision: false, crt: false, crosshair: false,
+  leaderboard: true, monkestats: true, termsfx: true, nightvision: false, crt: false, crosshair: false,
   fps: false, rainbow: false, deepfried: false, invert: false, retro: false,
   vignette: false, cinematic: false, lavavision: false, blueprint: false,
   speedlines: false, sessionclock: false, keystrokes: false, mirrorview: false,
@@ -93,7 +90,7 @@ const DEFAULT_MOD_CONFIG = {
 };
 
 const MOD_LABELS = {
-  leaderboard: "LEADERBOARD", termsfx: "TERMINAL SFX", nightvision: "NIGHT VISION",
+  leaderboard: "LEADERBOARD", monkestats: "MONKE STATS", termsfx: "TERMINAL SFX", nightvision: "NIGHT VISION",
   crt: "CRT SCANLINES", crosshair: "CROSSHAIR", fps: "FPS COUNTER",
   rainbow: "RGB MONKE", deepfried: "DEEP FRIED", invert: "X-RAY INVERT",
   retro: "GAMEBOY MODE", vignette: "TUNNEL VISION", cinematic: "CINEMATIC BARS",
@@ -130,16 +127,14 @@ function triggerModToast(title, text) {
 function applyVisualFilters() {
   const canvas = document.getElementById("unity-canvas");
   if (!canvas) return;
-  const activeFov = modConfig.ultrafov ? Math.max(modConfig.fov, 1.38) : modConfig.fov;
+  const bMods = window.bananaActiveMods || {};
+  let activeFov = modConfig.ultrafov ? Math.max(modConfig.fov, 1.38) : modConfig.fov;
+  if (bMods.hyperFov) activeFov = Math.max(activeFov, 1.48);
   const scaleX = modConfig.mirrorview ? -activeFov : activeFov;
   canvas.style.transform = `scale(${scaleX}, ${activeFov})`;
   canvas.style.transformOrigin = "center center";
 
-  const filters = [
-    `brightness(${modConfig.bright}%)`,
-    `saturate(${modConfig.sat}%)`,
-    `contrast(${modConfig.contrast}%)`
-  ];
+  const filters = [`brightness(${modConfig.bright}%)`, `saturate(${modConfig.sat}%)`, `contrast(${modConfig.contrast}%)`];
   if (modConfig.nightvision) filters.push("brightness(1.6) contrast(1.3) sepia(1) hue-rotate(70deg) saturate(3)");
   if (modConfig.lavavision) filters.push("sepia(1) hue-rotate(-35deg) saturate(450%) contrast(140%)");
   if (modConfig.blueprint) filters.push("invert(1) sepia(1) hue-rotate(180deg) saturate(400%) contrast(150%)");
@@ -148,23 +143,27 @@ function applyVisualFilters() {
   if (modConfig.retro) filters.push("grayscale(100%) sepia(100%) hue-rotate(55deg) contrast(160%)");
   if (modConfig.vhsglitch) filters.push("contrast(135%) saturate(160%) drop-shadow(3px 0px 0px rgba(255,0,80,0.6))");
   if (modConfig.matrixrain) filters.push("hue-rotate(85deg) contrast(130%) saturate(180%)");
-  if (modConfig.rainbow) filters.push(`hue-rotate(${rainbowHue}deg)`);
-
+  if (bMods.bananaVision) filters.push("sepia(1) hue-rotate(12deg) saturate(420%) contrast(125%)");
+  if (bMods.hologram) filters.push("sepia(1) hue-rotate(140deg) saturate(350%) brightness(120%) opacity(0.85)");
+  if (bMods.thermal) filters.push("invert(1) hue-rotate(180deg) saturate(300%)");
+  if (bMods.crtOverdrive) filters.push("contrast(165%) brightness(115%) saturate(150%)");
+  if (modConfig.rainbow || bMods.disco) filters.push(`hue-rotate(${rainbowHue}deg)`);
   canvas.style.filter = filters.join(" ");
 
   const crosshair = document.getElementById("gtag-crosshair");
   if (crosshair) {
-    crosshair.textContent = modConfig.vipreticle ? "◈" : "+";
+    crosshair.textContent = modConfig.vipreticle ? "<>" : "+";
     crosshair.style.color = modConfig.rgbcrosshair ? `hsl(${rainbowHue}, 100%, 55%)` : "#33ff33";
   }
 
   const rgbColor = `hsl(${rainbowHue}, 100%, 55%)`;
-  ['gtag-hud-hint', 'gtag-leaderboard', 'gtag-keystrokes'].forEach(id => {
+  ['gtag-hud-hint', 'gtag-leaderboard', 'gtag-keystrokes', 'gtag-stats-hud'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.borderColor = modConfig.rgbhud ? rgbColor : "";
   });
 }
-window.activeHackEffects = { screen: false, movement: false, invert: false, hud: false, puppet: false };
+window.applyVisualFilters = applyVisualFilters;
+window.activeHackEffects = { screen: false, movement: false, invert: false, hud: false };
 
 const KEY_CODE_NUMS = { KeyW: 87, KeyA: 65, KeyS: 83, KeyD: 68, Space: 32, ShiftLeft: 16, ShiftRight: 16, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 };
 const KEY_CHAR_MAP = { KeyW: "w", KeyA: "a", KeyS: "s", KeyD: "d", Space: " ", ShiftLeft: "Shift", ShiftRight: "Shift", ArrowUp: "ArrowUp", ArrowDown: "ArrowDown", ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight" };
@@ -173,8 +172,7 @@ window.releaseAllMovementKeys = function() {
   const canvas = document.getElementById("unity-canvas");
   if (!canvas) return;
   Object.keys(KEY_CODE_NUMS).forEach(code => {
-    const num = KEY_CODE_NUMS[code];
-    const key = KEY_CHAR_MAP[code];
+    const num = KEY_CODE_NUMS[code], key = KEY_CHAR_MAP[code];
     canvas.dispatchEvent(new KeyboardEvent("keyup", { key, code, keyCode: num, which: num, bubbles: true }));
     window.dispatchEvent(new KeyboardEvent("keyup", { key, code, keyCode: num, which: num, bubbles: true }));
   });
@@ -183,20 +181,13 @@ window.releaseAllMovementKeys = function() {
 window.applyIncomingHack = function(effect, state, attackerName) {
   if (!(effect in window.activeHackEffects)) return;
   window.activeHackEffects[effect] = Boolean(state);
-
-  if ((effect === "movement" || effect === "puppet" || effect === "invert") && state) {
-    window.releaseAllMovementKeys();
-  }
-  if (effect === "puppet" && !state) {
-    window.releaseAllMovementKeys();
-  }
+  if ((effect === "movement" || effect === "invert") && state) window.releaseAllMovementKeys();
 
   const labels = {
     screen: "SCREEN DISABLED",
     movement: "MOVEMENT HACKED",
     invert: "CONTROLS INVERTED",
-    hud: "HUD MODS HIJACKED",
-    puppet: "MOVEMENT HIJACKED (PUPPET)"
+    hud: "HUD MODS HIJACKED"
   };
 
   if (effect === "hud") {
@@ -209,13 +200,13 @@ window.applyIncomingHack = function(effect, state, attackerName) {
   updateHackOverlayIndicators();
   playTerminalSfx(state ? "error" : "vip");
   triggerModToast(
-    state ? "⚠ SYSTEM BREACH" : "SYSTEM RESTORED",
+    state ? "[ALERT] SYSTEM BREACH" : "SYSTEM RESTORED",
     state ? `${labels[effect]} BY ${attackerName.toUpperCase()}` : `${labels[effect]} CLEARED`
   );
 };
 
 window.clearAllIncomingHacks = function() {
-  window.activeHackEffects = { screen: false, movement: false, invert: false, hud: false, puppet: false };
+  window.activeHackEffects = { screen: false, movement: false, invert: false, hud: false };
   window.releaseAllMovementKeys();
   modConfig.mirrorview = false;
   modConfig.invert = false;
@@ -223,25 +214,16 @@ window.clearAllIncomingHacks = function() {
   updateHackOverlayIndicators();
 };
 
-window.executeRemotePuppetKey = function(evtType, code, key) {
-  const canvas = document.getElementById("unity-canvas");
-  if (!canvas) return;
-  const num = KEY_CODE_NUMS[code] || 0;
-  canvas.dispatchEvent(new KeyboardEvent(evtType, { key, code, keyCode: num, which: num, bubbles: true }));
-};
-
 function updateHackOverlayIndicators() {
   const fx = window.activeHackEffects;
   document.getElementById("gtag-hack-blackout")?.classList.toggle("gtag-hidden", !fx.screen);
-
   const badgeWrap = document.getElementById("gtag-hack-indicators");
   if (!badgeWrap) return;
   const activeList = [];
-  if (fx.screen) activeList.push("⚠ SCREEN DISABLED");
-  if (fx.movement) activeList.push("⚠ MOVEMENT HACKED");
-  if (fx.invert) activeList.push("⚠ CONTROLS INVERTED");
-  if (fx.hud) activeList.push("⚠ HUD MODS HIJACKED");
-  if (fx.puppet) activeList.push("⚠ MOVEMENT HIJACKED (PUPPET)");
+  if (fx.screen) activeList.push("[!] SCREEN DISABLED");
+  if (fx.movement) activeList.push("[!] MOVEMENT HACKED");
+  if (fx.invert) activeList.push("[!] CONTROLS INVERTED");
+  if (fx.hud) activeList.push("[!] HUD MODS HIJACKED");
 
   if (activeList.length === 0) {
     badgeWrap.classList.add("gtag-hidden");
@@ -261,18 +243,10 @@ const INVERT_KEY = { w: "s", s: "w", a: "d", d: "a", W: "S", S: "W", A: "D", D: 
     if (!e.isTrusted) return;
     if (!document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden")) return;
     const fx = window.activeHackEffects;
-
-    if ((fx.movement || fx.puppet) && MOVEMENT_CODES.has(e.code)) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      return;
-    }
-
+    if (fx.movement && MOVEMENT_CODES.has(e.code)) { e.preventDefault(); e.stopImmediatePropagation(); return; }
     if (fx.invert && INVERT_MAP[e.code]) {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const swappedCode = INVERT_MAP[e.code];
-      const swappedKey = INVERT_KEY[e.key] || e.key;
+      e.preventDefault(); e.stopImmediatePropagation();
+      const swappedCode = INVERT_MAP[e.code], swappedKey = INVERT_KEY[e.key] || e.key;
       const num = KEY_CODE_NUMS[swappedCode] || 0;
       document.getElementById("unity-canvas")?.dispatchEvent(new KeyboardEvent(evtType, { key: swappedKey, code: swappedCode, keyCode: num, which: num, bubbles: true }));
     }
@@ -288,14 +262,12 @@ function syncModUI() {
     { id: "slider-menuvol", valId: "val-menuvol", key: "menuVol", fmt: v => `${v}%` }
   ];
   sliders.forEach(s => {
-    const el = document.getElementById(s.id);
-    const lbl = document.getElementById(s.valId);
+    const el = document.getElementById(s.id), lbl = document.getElementById(s.valId);
     if (el) el.value = modConfig[s.key];
     if (lbl) lbl.textContent = s.fmt(modConfig[s.key]);
   });
 
   const loggedIn = isElementLoggedIn();
-
   document.getElementById("vip-locked-view")?.classList.toggle("gtag-hidden", loggedIn);
   document.getElementById("vip-unlocked-view")?.classList.toggle("gtag-hidden", !loggedIn);
 
@@ -310,6 +282,7 @@ function syncModUI() {
   });
 
   document.getElementById("gtag-leaderboard")?.classList.toggle("gtag-hidden", !modConfig.leaderboard);
+  document.getElementById("gtag-stats-hud")?.classList.toggle("gtag-hidden", !modConfig.monkestats);
   document.getElementById("crt-overlay")?.classList.toggle("gtag-hidden", !modConfig.crt);
   document.getElementById("gtag-crosshair")?.classList.toggle("gtag-hidden", !(modConfig.crosshair || modConfig.rgbcrosshair || modConfig.vipreticle));
   document.getElementById("gtag-vignette")?.classList.toggle("gtag-hidden", !modConfig.vignette);
@@ -318,15 +291,9 @@ function syncModUI() {
   document.getElementById("gtag-keystrokes")?.classList.toggle("gtag-hidden", !modConfig.keystrokes);
   document.querySelector(".gtag-terminal")?.classList.toggle("golden-theme", Boolean(modConfig.goldenui && loggedIn));
 
-  const aboutStatus = document.getElementById("about-account-status");
-  if (aboutStatus) {
-    aboutStatus.textContent = loggedIn
-      ? `ELEMENT VIP (${localStorage.getItem("gtag_mx_user") || "VERIFIED"})`
-      : (localStorage.getItem("gtag_saved_guest_nick") ? `GUEST (${localStorage.getItem("gtag_saved_guest_nick")})` : "GUEST");
-  }
-
   clearInterval(rainbowInterval);
-  if (modConfig.rainbow || modConfig.rgbcrosshair || modConfig.rgbhud) {
+  const bMods = window.bananaActiveMods || {};
+  if (modConfig.rainbow || modConfig.rgbcrosshair || modConfig.rgbhud || bMods.disco) {
     rainbowInterval = setInterval(() => { rainbowHue = (rainbowHue + 10) % 360; applyVisualFilters(); }, 60);
   }
 
@@ -370,7 +337,7 @@ window.updateSliderMod = (type, val) => { modConfig[type] = parseFloat(val); syn
 window.toggleMod = (mod) => {
   if (ELEMENT_EXCLUSIVE_MODS.has(mod) && !isElementLoggedIn()) {
     playTerminalSfx("error");
-    return triggerModToast("ELEMENT VIP ONLY", "SIGN IN WITH AN ELEMENT ACCOUNT TO USE VIP MODS!");
+    return triggerModToast("VIP ONLY", "SIGN IN WITH ELEMENT OR RENT BANANA VIP!");
   }
   modConfig[mod] = !modConfig[mod];
   syncModUI();
