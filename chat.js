@@ -20,6 +20,67 @@ document.addEventListener("DOMContentLoaded", () => {
   let cachedRoomList = [];
   let toastTimeout = null;
 
+  // --- MANDATORY AUTOMATIC POSITION TRACKING FROM SPAWN (0, 0) ---
+  let myPosX = 0;
+  let myPosZ = 0;
+  let myYaw = 0;
+  let lastBroadcastX = null;
+  let lastBroadcastZ = null;
+  let lastHeartbeatTime = 0;
+  const activeKeys = new Set();
+  const trackedMonkes = new Map();
+
+  window.addEventListener("keydown", (e) => {
+    const overlay = document.getElementById("gtag-overlay");
+    if (overlay && !overlay.classList.contains("gtag-hidden")) return;
+    const k = e.key.toLowerCase();
+    activeKeys.add(k);
+    if (k === "r") {
+      window.resetRadarSpawn();
+    }
+  }, true);
+
+  window.addEventListener("keyup", (e) => {
+    activeKeys.delete(e.key.toLowerCase());
+  }, true);
+
+  window.addEventListener("mousemove", (e) => {
+    if (document.pointerLockElement) {
+      myYaw += e.movementX * 0.003;
+    }
+  }, true);
+
+  window.resetRadarSpawn = function() {
+    myPosX = 0;
+    myPosZ = 0;
+    myYaw = 0;
+    lastBroadcastX = null;
+    lastBroadcastZ = null;
+    const coordEl = document.getElementById("radar-coords");
+    if (coordEl) coordEl.textContent = "X:0 Z:0";
+  };
+
+  setInterval(() => {
+    const overlay = document.getElementById("gtag-overlay");
+    if (overlay && !overlay.classList.contains("gtag-hidden")) return;
+
+    let forward = 0;
+    let strafe = 0;
+    if (activeKeys.has("w") || activeKeys.has("arrowup")) forward += 1;
+    if (activeKeys.has("s") || activeKeys.has("arrowdown")) forward -= 1;
+    if (activeKeys.has("d") || activeKeys.has("arrowright")) strafe += 1;
+    if (activeKeys.has("a") || activeKeys.has("arrowleft")) strafe -= 1;
+
+    if (forward !== 0 || strafe !== 0) {
+      const speed = 0.28;
+      myPosX += (Math.sin(myYaw) * forward + Math.cos(myYaw) * strafe) * speed;
+      myPosZ += (-Math.cos(myYaw) * forward + Math.sin(myYaw) * strafe) * speed;
+
+      const coordEl = document.getElementById("radar-coords");
+      if (coordEl) coordEl.textContent = `X:${Math.round(myPosX)} Z:${Math.round(myPosZ)}`;
+    }
+  }, 33);
+
   function setStatus(msg, isError = false) {
     if (!statusLabel) return;
     statusLabel.style.color = isError ? "#ff4444" : "#33ff33";
@@ -63,7 +124,6 @@ document.addEventListener("DOMContentLoaded", () => {
     msgBox.appendChild(row);
     msgBox.scrollTop = msgBox.scrollHeight;
   }
-
   async function resolveHomeserver(domain) {
     try {
       const res = await fetch(`https://${domain}/.well-known/matrix/client`);
@@ -134,6 +194,7 @@ document.addEventListener("DOMContentLoaded", () => {
       loginBtn.textContent = "SIGN IN & JOIN";
     }
   }
+
   async function getRoomName(rId) {
     try {
       const res = await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(rId)}/state/m.room.name`, {
@@ -220,7 +281,7 @@ document.addEventListener("DOMContentLoaded", () => {
     chatBox.classList.remove("gtag-hidden");
     msgBox.innerHTML = "";
     addChatLine("SYSTEM", `LOGGED IN AS ${userId}`);
-    addChatLine("SYSTEM", `JOINING ${DEFAULT_GENERAL_ALIAS}...`);
+    addChatLine("SYSTEM", "AUTO-RADAR BROADCAST: ACTIVE");
 
     const savedRoom = localStorage.getItem("gtag_mx_custom_room");
     if (savedRoom) {
@@ -237,6 +298,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
+  setInterval(() => {
+    if (!accessToken || !activeRoomId) return;
+    const rx = Math.round(myPosX);
+    const rz = Math.round(myPosZ);
+    const now = Date.now();
+
+    if (rx !== lastBroadcastX || rz !== lastBroadcastZ || now - lastHeartbeatTime > 12000) {
+      lastBroadcastX = rx;
+      lastBroadcastZ = rz;
+      lastHeartbeatTime = now;
+      sendRawMatrixText(`[POS:${rx},${rz}]`);
+    }
+  }, 3500);
   async function startSyncLoop() {
     while (accessToken && isSyncing) {
       try {
@@ -265,13 +339,27 @@ document.addEventListener("DOMContentLoaded", () => {
 
         for (const ev of events) {
           if (ev.type === "m.room.message" && ev.content?.body) {
+            const body = ev.content.body;
             const displayUser = ev.sender.split(":").at(0).replace(/^@/, "");
-            addChatLine(displayUser, ev.content.body);
+
+            const posMatch = body.match(/^\[POS:(-?\d+),(-?\d+)\]$/);
+            if (posMatch) {
+              if (ev.sender !== userId) {
+                trackedMonkes.set(displayUser, {
+                  x: parseInt(posMatch.at(1), 10),
+                  z: parseInt(posMatch.at(2), 10),
+                  time: Date.now()
+                });
+              }
+              continue;
+            }
+
+            addChatLine(displayUser, body);
 
             const overlay = document.getElementById("gtag-overlay");
             const terminalClosed = overlay && overlay.classList.contains("gtag-hidden");
             if (!isInitialSync && terminalClosed && ev.sender !== userId) {
-              showGtagNotification("STUMP CHAT // [T] TO REPLY", `[${displayUser}]: ${ev.content.body}`);
+              showGtagNotification("STUMP CHAT // [T] TO REPLY", `[${displayUser}]: ${body}`);
             }
           }
         }
@@ -279,6 +367,24 @@ document.addEventListener("DOMContentLoaded", () => {
         await new Promise(r => setTimeout(r, 3000));
       }
     }
+  }
+
+  async function sendRawMatrixText(bodyText) {
+    if (!accessToken || !activeRoomId) return null;
+    const txnId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const sendUrl = `${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.room.message/${txnId}`;
+
+    return fetch(sendUrl, {
+      method: "PUT",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        msgtype: "m.text",
+        body: bodyText
+      })
+    });
   }
 
   async function sendMessage(text) {
@@ -299,23 +405,9 @@ document.addEventListener("DOMContentLoaded", () => {
       return;
     }
 
-    const txnId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    const sendUrl = `${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.room.message/${txnId}`;
-
     try {
-      const res = await fetch(sendUrl, {
-        method: "PUT",
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          msgtype: "m.text",
-          body: text
-        })
-      });
-
-      if (!res.ok) {
+      const res = await sendRawMatrixText(text);
+      if (res && !res.ok) {
         const errData = await res.json();
         addChatLine("SYSTEM", `SEND ERROR: ${errData.error || res.status}`);
       }
@@ -323,6 +415,81 @@ document.addEventListener("DOMContentLoaded", () => {
       addChatLine("SYSTEM", `NETWORK ERROR: ${err.message}`);
     }
   }
+
+  let radarSweep = 0;
+  setInterval(() => {
+    const radarBox = document.getElementById("gtag-radar");
+    const canvas = document.getElementById("radar-canvas");
+    if (!radarBox || !canvas || radarBox.classList.contains("gtag-hidden")) return;
+
+    const ctx = canvas.getContext("2d");
+    const w = canvas.width;
+    const h = canvas.height;
+    const cx = w / 2;
+    const cy = h / 2;
+    const r = w / 2 - 4;
+
+    ctx.clearRect(0, 0, w, h);
+
+    ctx.strokeStyle = "#1f3d1f";
+    ctx.lineWidth = 1;
+    [0.33, 0.66, 1].forEach(s => {
+      ctx.beginPath();
+      ctx.arc(cx, cy, r * s, 0, Math.PI * 2);
+      ctx.stroke();
+    });
+    ctx.beginPath();
+    ctx.moveTo(cx, 4); ctx.lineTo(cx, h - 4);
+    ctx.moveTo(4, cy); ctx.lineTo(w - 4, cy);
+    ctx.stroke();
+
+    radarSweep = (radarSweep + 0.08) % (Math.PI * 2);
+    ctx.strokeStyle = "rgba(51, 255, 51, 0.55)";
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.cos(radarSweep) * r, cy + Math.sin(radarSweep) * r);
+    ctx.stroke();
+
+    ctx.fillStyle = "#33ff33";
+    ctx.beginPath();
+    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = "#33ff33";
+    ctx.beginPath();
+    ctx.moveTo(cx, cy);
+    ctx.lineTo(cx + Math.sin(myYaw) * 12, cy - Math.cos(myYaw) * 12);
+    ctx.stroke();
+
+    let onlineFriends = 0;
+    const now = Date.now();
+    ctx.font = "7px monospace";
+
+    trackedMonkes.forEach((info, name) => {
+      if (now - info.time > 30000) return;
+      onlineFriends++;
+
+      let dx = (info.x - myPosX) * 0.65;
+      let dz = (info.z - myPosZ) * 0.65;
+
+      const dist = Math.hypot(dx, dz);
+      if (dist > r - 8) {
+        dx = (dx / dist) * (r - 8);
+        dz = (dz / dist) * (r - 8);
+      }
+
+      const bx = cx + dx;
+      const by = cy + dz;
+
+      ctx.fillStyle = "#ffaa00";
+      ctx.beginPath();
+      ctx.arc(bx, by, 4, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillText(name.slice(0, 8), bx + 6, by + 3);
+    });
+
+    const countEl = document.getElementById("radar-count");
+    if (countEl) countEl.textContent = `${onlineFriends + 1} ONLINE`;
+  }, 50);
 
   function handleLogout() {
     accessToken = "";
