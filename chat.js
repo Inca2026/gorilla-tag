@@ -40,7 +40,7 @@ window.loginElementAccount = async function() {
     if (cleanUser.includes(':')) {
       const parts = cleanUser.split(':');
       cleanUser = parts[0];
-      if (parts[1].toLowerCase() !== 'matrix.org') {
+      if (parts[1] && parts[1].toLowerCase() !== 'matrix.org') {
         activeHomeserver = `https://${parts[1]}`;
       }
     }
@@ -93,19 +93,6 @@ window.logoutElementAccount = function() {
   loginBox.classList.remove('gtag-hidden');
   msgBox.innerHTML = '<div class="chat-line" style="color:#888;">* LOGGED OUT *</div>';
 };
-
-if (loginBtn) {
-  loginBtn.onclick = null;
-  loginBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    window.loginElementAccount();
-  });
-}
-
-if (accessToken && myUserId) {
-  enterStumpNetwork();
-}
 
 async function enterStumpNetwork() {
   loginBox.classList.add('gtag-hidden');
@@ -219,4 +206,8 @@ function appendMessage(user, text) {
 
 function escapeHTML(str) {
   return str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag]));
+}
+
+if (accessToken && myUserId) {
+  enterStumpNetwork();
 }
