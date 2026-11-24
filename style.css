@@ -266,3 +266,35 @@ input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #111811 inset !important
   -webkit-box-shadow: 0 0 0 30px #111811 inset !important;
   -webkit-text-fill-color: #ffdd44 !important;
 }
+
+/* Monke Hack Terminal, Blackout Overlay & Active Hack Indicators */
+.gtag-btn.hack-tab-btn { border-color: #ff4444; color: #ff6666; }
+.gtag-btn.hack-tab-btn:hover, .gtag-btn.hack-tab-btn.active { background: #ff4444; color: #111; }
+
+#hack-code-input {
+  flex: 1; background: transparent; border: none; border-bottom: 2px solid #ff4444;
+  color: #ff6666; font-family: 'Press Start 2P', monospace; font-size: 9px; outline: none; padding: 6px 2px;
+}
+
+#gtag-hack-blackout {
+  position: fixed; inset: 0; background: #050000; z-index: 9400;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: #ff3333; text-align: center; pointer-events: none;
+  border: 6px solid #ff3333; box-shadow: inset 0 0 60px rgba(255, 0, 0, 0.45);
+}
+
+#gtag-hack-indicators {
+  position: fixed; top: 14px; left: 14px; z-index: 9800;
+  display: flex; flex-direction: column; gap: 6px; pointer-events: none;
+}
+
+.gtag-hack-pill {
+  background: rgba(28, 4, 4, 0.92); border: 2px solid #ff3333; color: #ff4444;
+  font-size: 8px; padding: 7px 10px; box-shadow: 0 0 10px rgba(255, 0, 0, 0.5);
+  animation: hackPulse 1s infinite alternate;
+}
+
+@keyframes hackPulse {
+  from { opacity: 0.75; }
+  to { opacity: 1; }
+}
