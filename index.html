@@ -159,11 +159,13 @@
           <button class="gtag-btn vip-tab-btn" onclick="switchTab('chat')">GO TO ELEMENT SIGN IN</button>
         </div>
         <div id="vip-unlocked-view" class="gtag-hidden">
-          <div style="display:flex; justify-content:space-between; align-items:center; font-size:8px; color:#ffaa00; margin-bottom:8px;">
-            <span>[★] ELEMENT VIP EXCLUSIVE MODS</span>
-            <button class="gtag-btn vip-tab-btn" style="font-size:7px;" onclick="sendVipBroadcastFlare()">SEND VIP FLARE</button>
+          <div style="font-size:8px; color:#ffaa00; margin-bottom:8px;">[★] ELEMENT VIP EXCLUSIVE MODS</div>
+          <div class="gtag-input-row" style="margin-bottom:10px;">
+            <span style="color:#ffaa00; font-size:9px;">★&gt;</span>
+            <input id="vip-flare-input" type="text" maxlength="85" placeholder="TYPE TOP-SCREEN VIP FLARE..." style="border-bottom-color:#ffaa00; color:#ffdd44; font-size:9px;" />
+            <button class="gtag-btn vip-tab-btn" style="font-size:7px; white-space:nowrap;" onclick="sendVipBroadcastFlare()">SEND VIP FLARE</button>
           </div>
-          <div class="gtag-mod-grid" style="max-height:255px;">
+          <div class="gtag-mod-grid" style="max-height:225px;">
             <button id="mod-rgbcrosshair" class="gtag-btn" onclick="toggleMod('rgbcrosshair')">RGB RETICLE: OFF</button>
             <button id="mod-goldenui" class="gtag-btn" onclick="toggleMod('goldenui')">GOLD TERMINAL: OFF</button>
             <button id="mod-chatnotify" class="gtag-btn" onclick="toggleMod('chatnotify')">CHAT PING SFX: OFF</button>
