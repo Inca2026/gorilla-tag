@@ -15,71 +15,83 @@ document.addEventListener("DOMContentLoaded", () => {
   let userId = localStorage.getItem("gtag_mx_user") || "";
   let homeserver = localStorage.getItem("gtag_mx_server") || FALLBACK_SERVER;
   let activeRoomId = localStorage.getItem("gtag_mx_custom_room") || "";
+
+  let guestToken = sessionStorage.getItem("gtag_lb_guest_token") || "";
+  let guestUserId = sessionStorage.getItem("gtag_lb_guest_user") || "";
+  let guestRoomId = "";
+
   let syncToken = "";
   let isSyncing = false;
   let cachedRoomList = [];
   let toastTimeout = null;
 
-  // --- MANDATORY AUTOMATIC POSITION TRACKING FROM SPAWN (0, 0) ---
-  let myPosX = 0;
-  let myPosZ = 0;
-  let myYaw = 0;
-  let lastBroadcastX = null;
-  let lastBroadcastZ = null;
-  let lastHeartbeatTime = 0;
-  const activeKeys = new Set();
-  const trackedMonkes = new Map();
+  // --- ONLINE PLAYTIME TRACKING ---
+  let totalPlaySeconds = parseInt(localStorage.getItem("gtag_total_playtime") || "0", 10);
+  const onlinePlayers = new Map();
 
-  window.addEventListener("keydown", (e) => {
-    const overlay = document.getElementById("gtag-overlay");
-    if (overlay && !overlay.classList.contains("gtag-hidden")) return;
-    const k = e.key.toLowerCase();
-    activeKeys.add(k);
-    if (k === "r") {
-      window.resetRadarSpawn();
+  function formatPlaytime(sec) {
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    const pad = (n) => String(n).padStart(2, "0");
+    return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+  }
+
+  function getMyDisplayName() {
+    if (userId) return userId.split(":").at(0).replace(/^@/, "");
+    if (guestUserId) {
+      const raw = guestUserId.split(":").at(0).replace(/^@/, "");
+      return /^\d+$/.test(raw) ? `MONKE_${raw.slice(-4)}` : raw;
     }
-  }, true);
+    return "YOU";
+  }
 
-  window.addEventListener("keyup", (e) => {
-    activeKeys.delete(e.key.toLowerCase());
-  }, true);
-
-  window.addEventListener("mousemove", (e) => {
-    if (document.pointerLockElement) {
-      myYaw += e.movementX * 0.003;
-    }
-  }, true);
-
-  window.resetRadarSpawn = function() {
-    myPosX = 0;
-    myPosZ = 0;
-    myYaw = 0;
-    lastBroadcastX = null;
-    lastBroadcastZ = null;
-    const coordEl = document.getElementById("radar-coords");
-    if (coordEl) coordEl.textContent = "X:0 Z:0";
-  };
-
+  // Increment playtime every 1 second and update the leaderboard UI
   setInterval(() => {
-    const overlay = document.getElementById("gtag-overlay");
-    if (overlay && !overlay.classList.contains("gtag-hidden")) return;
-
-    let forward = 0;
-    let strafe = 0;
-    if (activeKeys.has("w") || activeKeys.has("arrowup")) forward += 1;
-    if (activeKeys.has("s") || activeKeys.has("arrowdown")) forward -= 1;
-    if (activeKeys.has("d") || activeKeys.has("arrowright")) strafe += 1;
-    if (activeKeys.has("a") || activeKeys.has("arrowleft")) strafe -= 1;
-
-    if (forward !== 0 || strafe !== 0) {
-      const speed = 0.28;
-      myPosX += (Math.sin(myYaw) * forward + Math.cos(myYaw) * strafe) * speed;
-      myPosZ += (-Math.cos(myYaw) * forward + Math.sin(myYaw) * strafe) * speed;
-
-      const coordEl = document.getElementById("radar-coords");
-      if (coordEl) coordEl.textContent = `X:${Math.round(myPosX)} Z:${Math.round(myPosZ)}`;
+    totalPlaySeconds += 1;
+    if (totalPlaySeconds % 5 === 0) {
+      localStorage.setItem("gtag_total_playtime", String(totalPlaySeconds));
     }
-  }, 33);
+
+    const lbBox = document.getElementById("gtag-leaderboard");
+    const listEl = document.getElementById("lb-list");
+    const countEl = document.getElementById("lb-count");
+    if (!lbBox || !listEl || lbBox.classList.contains("gtag-hidden")) return;
+
+    const now = Date.now();
+    const entries = [
+      { name: getMyDisplayName(), seconds: totalPlaySeconds, isSelf: true }
+    ];
+
+    onlinePlayers.forEach((info, name) => {
+      if (now - info.lastSeen > 35000) return; // Offline after 35s without heartbeat
+      const liveElapsed = Math.floor((now - info.lastSeen) / 1000);
+      entries.push({
+        name,
+        seconds: info.seconds + liveElapsed,
+        isSelf: false
+      });
+    });
+
+    // Sort highest playtime first
+    entries.sort((a, b) => b.seconds - a.seconds);
+
+    if (countEl) countEl.textContent = `${entries.length} ONLINE`;
+
+    listEl.innerHTML = entries.map((entry, idx) => {
+      const cls = entry.isSelf ? "lb-row self-entry" : "lb-row";
+      const label = `#${idx + 1} ${entry.name.slice(0, 12)}`;
+      return `<div class="${cls}"><span>${label}</span><span>${formatPlaytime(entry.seconds)}</span></div>`;
+    }).join("");
+  }, 1000);
+
+  // Broadcast playtime heartbeat every 10 seconds while online
+  setInterval(() => {
+    const tok = accessToken || guestToken;
+    const rm = activeRoomId || guestRoomId;
+    if (!tok || !rm) return;
+    sendRawMatrixText(`[TIME:${totalPlaySeconds}]`);
+  }, 10000);
 
   function setStatus(msg, isError = false) {
     if (!statusLabel) return;
@@ -97,9 +109,7 @@ document.addEventListener("DOMContentLoaded", () => {
     toastBody.textContent = bodyText;
     toast.classList.remove("gtag-hidden");
 
-    if (typeof playMonkeSound === "function") {
-      playMonkeSound("computer");
-    }
+    if (typeof playTerminalSfx === "function") playTerminalSfx("receive");
 
     clearTimeout(toastTimeout);
     toastTimeout = setTimeout(() => {
@@ -124,6 +134,52 @@ document.addEventListener("DOMContentLoaded", () => {
     msgBox.appendChild(row);
     msgBox.scrollTop = msgBox.scrollHeight;
   }
+  async function initGuestLeaderboardSession() {
+    if (accessToken) return;
+    try {
+      if (!guestToken) {
+        const regRes = await fetch(`${FALLBACK_SERVER}/_matrix/client/v3/register?kind=guest`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: "{}"
+        });
+        const regData = await regRes.json();
+        if (regData.access_token) {
+          guestToken = regData.access_token;
+          guestUserId = regData.user_id;
+          sessionStorage.setItem("gtag_lb_guest_token", guestToken);
+          sessionStorage.setItem("gtag_lb_guest_user", guestUserId);
+        }
+      }
+
+      if (!guestToken) return;
+
+      const lookupRes = await fetch(
+        `${FALLBACK_SERVER}/_matrix/client/v3/directory/room/${encodeURIComponent(DEFAULT_GENERAL_ALIAS)}`,
+        { headers: { "Authorization": `Bearer ${guestToken}` } }
+      );
+      const lookupData = await lookupRes.json();
+      if (!lookupData.room_id) return;
+
+      guestRoomId = lookupData.room_id;
+      await fetch(`${FALLBACK_SERVER}/_matrix/client/v3/join/${encodeURIComponent(guestRoomId)}`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${guestToken}`,
+          "Content-Type": "application/json"
+        },
+        body: "{}"
+      });
+
+      sendRawMatrixText(`[TIME:${totalPlaySeconds}]`);
+
+      if (!isSyncing) {
+        isSyncing = true;
+        startSyncLoop();
+      }
+    } catch (_) {}
+  }
+
   async function resolveHomeserver(domain) {
     try {
       const res = await fetch(`https://${domain}/.well-known/matrix/client`);
@@ -141,10 +197,12 @@ document.addEventListener("DOMContentLoaded", () => {
     const password = passField.value;
 
     if (!rawUser || !password) {
+      if (typeof playTerminalSfx === "function") playTerminalSfx("error");
       setStatus("ENTER YOUR ELEMENT USERNAME AND PASSWORD.", true);
       return;
     }
 
+    if (typeof playTerminalSfx === "function") playTerminalSfx("click");
     loginBtn.disabled = true;
     loginBtn.textContent = "CONNECTING...";
     setStatus("LOOKING UP HOMESERVER...");
@@ -179,6 +237,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       accessToken = loginData.access_token;
       userId = loginData.user_id;
+      syncToken = "";
 
       localStorage.setItem("gtag_mx_token", accessToken);
       localStorage.setItem("gtag_mx_user", userId);
@@ -186,8 +245,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
       passField.value = "";
       setStatus("");
+      if (typeof playTerminalSfx === "function") playTerminalSfx("send");
       await openStumpRoom();
     } catch (err) {
+      if (typeof playTerminalSfx === "function") playTerminalSfx("error");
       setStatus(`LOGIN ERROR: ${err.message}`, true);
     } finally {
       loginBtn.disabled = false;
@@ -215,6 +276,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const label = document.getElementById("matrix-room-label");
     if (label) label.textContent = `ROOM: ${roomTitle.toUpperCase()}`;
     addChatLine("SYSTEM", `CONNECTED TO #${roomTitle.toUpperCase()}!`);
+    sendRawMatrixText(`[TIME:${totalPlaySeconds}]`);
   }
 
   async function autoJoinGeneralRoom() {
@@ -281,7 +343,6 @@ document.addEventListener("DOMContentLoaded", () => {
     chatBox.classList.remove("gtag-hidden");
     msgBox.innerHTML = "";
     addChatLine("SYSTEM", `LOGGED IN AS ${userId}`);
-    addChatLine("SYSTEM", "AUTO-RADAR BROADCAST: ACTIVE");
 
     const savedRoom = localStorage.getItem("gtag_mx_custom_room");
     if (savedRoom) {
@@ -297,30 +358,20 @@ document.addEventListener("DOMContentLoaded", () => {
       startSyncLoop();
     }
   }
-
-  setInterval(() => {
-    if (!accessToken || !activeRoomId) return;
-    const rx = Math.round(myPosX);
-    const rz = Math.round(myPosZ);
-    const now = Date.now();
-
-    if (rx !== lastBroadcastX || rz !== lastBroadcastZ || now - lastHeartbeatTime > 12000) {
-      lastBroadcastX = rx;
-      lastBroadcastZ = rz;
-      lastHeartbeatTime = now;
-      sendRawMatrixText(`[POS:${rx},${rz}]`);
-    }
-  }, 3500);
   async function startSyncLoop() {
-    while (accessToken && isSyncing) {
+    while ((accessToken || guestToken) && isSyncing) {
+      const tok = accessToken || guestToken;
+      const srv = accessToken ? homeserver : FALLBACK_SERVER;
+      const targetRoom = activeRoomId || guestRoomId;
+
       try {
         const query = syncToken ? `?timeout=15000&since=${encodeURIComponent(syncToken)}` : "?timeout=15000";
-        const res = await fetch(`${homeserver}/_matrix/client/v3/sync${query}`, {
-          headers: { "Authorization": `Bearer ${accessToken}` }
+        const res = await fetch(`${srv}/_matrix/client/v3/sync${query}`, {
+          headers: { "Authorization": `Bearer ${tok}` }
         });
 
         if (!res.ok) {
-          if (res.status === 401) {
+          if (res.status === 401 && accessToken) {
             handleLogout();
             setStatus("SESSION EXPIRED. SIGN IN AGAIN.", true);
             return;
@@ -334,32 +385,35 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.next_batch) syncToken = data.next_batch;
 
         const joinedRooms = data.rooms?.join || {};
-        const stumpData = joinedRooms[activeRoomId];
+        const stumpData = joinedRooms[targetRoom];
         const events = stumpData?.timeline?.events || [];
+        const selfId = userId || guestUserId;
 
         for (const ev of events) {
           if (ev.type === "m.room.message" && ev.content?.body) {
             const body = ev.content.body;
-            const displayUser = ev.sender.split(":").at(0).replace(/^@/, "");
+            const rawSender = ev.sender.split(":").at(0).replace(/^@/, "");
+            const displayUser = /^\d+$/.test(rawSender) ? `MONKE_${rawSender.slice(-4)}` : rawSender;
 
-            const posMatch = body.match(/^\[POS:(-?\d+),(-?\d+)\]$/);
-            if (posMatch) {
-              if (ev.sender !== userId) {
-                trackedMonkes.set(displayUser, {
-                  x: parseInt(posMatch.at(1), 10),
-                  z: parseInt(posMatch.at(2), 10),
-                  time: Date.now()
+            // Intercept silent [TIME:seconds] playtime heartbeat packets
+            const timeMatch = body.match(/^\[TIME:(\d+)\]$/);
+            if (timeMatch) {
+              if (ev.sender !== selfId && !isInitialSync) {
+                onlinePlayers.set(displayUser, {
+                  seconds: parseInt(timeMatch.at(1), 10),
+                  lastSeen: Date.now()
                 });
               }
               continue;
             }
 
-            addChatLine(displayUser, body);
-
-            const overlay = document.getElementById("gtag-overlay");
-            const terminalClosed = overlay && overlay.classList.contains("gtag-hidden");
-            if (!isInitialSync && terminalClosed && ev.sender !== userId) {
-              showGtagNotification("STUMP CHAT // [T] TO REPLY", `[${displayUser}]: ${body}`);
+            if (accessToken) {
+              addChatLine(displayUser, body);
+              const overlay = document.getElementById("gtag-overlay");
+              const terminalClosed = overlay && overlay.classList.contains("gtag-hidden");
+              if (!isInitialSync && terminalClosed && ev.sender !== selfId) {
+                showGtagNotification("STUMP CHAT // [T] TO REPLY", `[${displayUser}]: ${body}`);
+              }
             }
           }
         }
@@ -370,14 +424,18 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function sendRawMatrixText(bodyText) {
-    if (!accessToken || !activeRoomId) return null;
+    const tok = accessToken || guestToken;
+    const rm = activeRoomId || guestRoomId;
+    const srv = accessToken ? homeserver : FALLBACK_SERVER;
+    if (!tok || !rm) return null;
+
     const txnId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    const sendUrl = `${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.room.message/${txnId}`;
+    const sendUrl = `${srv}/_matrix/client/v3/rooms/${encodeURIComponent(rm)}/send/m.room.message/${txnId}`;
 
     return fetch(sendUrl, {
       method: "PUT",
       headers: {
-        "Authorization": `Bearer ${accessToken}`,
+        "Authorization": `Bearer ${tok}`,
         "Content-Type": "application/json"
       },
       body: JSON.stringify({
@@ -407,89 +465,17 @@ document.addEventListener("DOMContentLoaded", () => {
 
     try {
       const res = await sendRawMatrixText(text);
-      if (res && !res.ok) {
+      if (res && res.ok) {
+        if (typeof playTerminalSfx === "function") playTerminalSfx("send");
+      } else if (res) {
         const errData = await res.json();
+        if (typeof playTerminalSfx === "function") playTerminalSfx("error");
         addChatLine("SYSTEM", `SEND ERROR: ${errData.error || res.status}`);
       }
     } catch (err) {
       addChatLine("SYSTEM", `NETWORK ERROR: ${err.message}`);
     }
   }
-
-  let radarSweep = 0;
-  setInterval(() => {
-    const radarBox = document.getElementById("gtag-radar");
-    const canvas = document.getElementById("radar-canvas");
-    if (!radarBox || !canvas || radarBox.classList.contains("gtag-hidden")) return;
-
-    const ctx = canvas.getContext("2d");
-    const w = canvas.width;
-    const h = canvas.height;
-    const cx = w / 2;
-    const cy = h / 2;
-    const r = w / 2 - 4;
-
-    ctx.clearRect(0, 0, w, h);
-
-    ctx.strokeStyle = "#1f3d1f";
-    ctx.lineWidth = 1;
-    [0.33, 0.66, 1].forEach(s => {
-      ctx.beginPath();
-      ctx.arc(cx, cy, r * s, 0, Math.PI * 2);
-      ctx.stroke();
-    });
-    ctx.beginPath();
-    ctx.moveTo(cx, 4); ctx.lineTo(cx, h - 4);
-    ctx.moveTo(4, cy); ctx.lineTo(w - 4, cy);
-    ctx.stroke();
-
-    radarSweep = (radarSweep + 0.08) % (Math.PI * 2);
-    ctx.strokeStyle = "rgba(51, 255, 51, 0.55)";
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.cos(radarSweep) * r, cy + Math.sin(radarSweep) * r);
-    ctx.stroke();
-
-    ctx.fillStyle = "#33ff33";
-    ctx.beginPath();
-    ctx.arc(cx, cy, 4, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = "#33ff33";
-    ctx.beginPath();
-    ctx.moveTo(cx, cy);
-    ctx.lineTo(cx + Math.sin(myYaw) * 12, cy - Math.cos(myYaw) * 12);
-    ctx.stroke();
-
-    let onlineFriends = 0;
-    const now = Date.now();
-    ctx.font = "7px monospace";
-
-    trackedMonkes.forEach((info, name) => {
-      if (now - info.time > 30000) return;
-      onlineFriends++;
-
-      let dx = (info.x - myPosX) * 0.65;
-      let dz = (info.z - myPosZ) * 0.65;
-
-      const dist = Math.hypot(dx, dz);
-      if (dist > r - 8) {
-        dx = (dx / dist) * (r - 8);
-        dz = (dz / dist) * (r - 8);
-      }
-
-      const bx = cx + dx;
-      const by = cy + dz;
-
-      ctx.fillStyle = "#ffaa00";
-      ctx.beginPath();
-      ctx.arc(bx, by, 4, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.fillText(name.slice(0, 8), bx + 6, by + 3);
-    });
-
-    const countEl = document.getElementById("radar-count");
-    if (countEl) countEl.textContent = `${onlineFriends + 1} ONLINE`;
-  }, 50);
 
   function handleLogout() {
     accessToken = "";
@@ -502,7 +488,9 @@ document.addEventListener("DOMContentLoaded", () => {
     localStorage.removeItem("gtag_mx_custom_room");
     chatBox.classList.add("gtag-hidden");
     loginBox.classList.remove("gtag-hidden");
+    if (typeof playTerminalSfx === "function") playTerminalSfx("close");
     setStatus("SIGNED OUT.");
+    initGuestLeaderboardSession();
   }
 
   window.loginElementAccount = handleLogin;
@@ -544,5 +532,7 @@ document.addEventListener("DOMContentLoaded", () => {
   setStatus("READY TO SIGN IN.");
   if (accessToken && userId) {
     openStumpRoom();
+  } else {
+    initGuestLeaderboardSession();
   }
 });
