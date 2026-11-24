@@ -124,3 +124,39 @@ input:-webkit-autofill:focus {
   pointer-events: none; z-index: 95;
   text-shadow: 0 0 4px #000;
 }
+
+/* Gorilla OS Toast Notification */
+#gtag-toast {
+  position: fixed;
+  top: 16px;
+  right: 16px;
+  width: 340px;
+  max-width: 90vw;
+  background: #111811;
+  border: 4px solid #2b2b2b;
+  box-shadow: 0 0 0 3px #000, 0 0 15px rgba(51, 255, 51, 0.35), inset 0 0 15px rgba(51, 255, 51, 0.2);
+  padding: 12px;
+  z-index: 9998;
+  pointer-events: none;
+  animation: gtagSlideIn 0.2s ease-out;
+}
+
+#gtag-toast-title {
+  font-size: 8px;
+  color: #ffaa00;
+  border-bottom: 2px solid #33ff33;
+  padding-bottom: 6px;
+  margin-bottom: 8px;
+}
+
+#gtag-toast-body {
+  font-size: 9px;
+  color: #33ff33;
+  line-height: 1.5;
+  word-wrap: break-word;
+}
+
+@keyframes gtagSlideIn {
+  from { transform: translateX(30px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
