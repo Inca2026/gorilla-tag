@@ -1,4 +1,4 @@
-// BUILT-IN WEB AUDIO MONKE SOUNDBOARD, TERMINAL SFX, VOLUME HOOKS & SAVABLE CLIENT MODS
+// BUILT-IN WEB AUDIO MONKE SOUNDBOARD, GLOBAL VIP SFX, VOLUME HOOKS & SAVABLE CLIENT MODS
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const originalGainConnect = GainNode.prototype.connect;
 const gameGainNodes = new WeakSet();
@@ -51,24 +51,30 @@ window.playTerminalSfx = function(sfx) {
   else if (sfx === 'vip') { playTone(523.25, 'triangle', 0.08, 0, 783.99, 0.18); playTone(1046.5, 'triangle', 0.14, 0.08, 1318.5, 0.18); }
 };
 
-function playMonkeSound(sound) {
+const VIP_ONLY_SOUNDS = new Set(['banshee', 'airhorn', 'shinyrock']);
+
+function playMonkeSound(sound, isRemote = false) {
+  if (!isRemote && VIP_ONLY_SOUNDS.has(sound) && !isElementLoggedIn()) {
+    return triggerModToast("ELEMENT LOCKED", "SIGN IN WITH ELEMENT FOR VIP SOUNDS!");
+  }
+
+  if (!isRemote && isElementLoggedIn() && typeof window.broadcastGlobalSound === "function") {
+    window.broadcastGlobalSound(sound);
+    return;
+  }
+
   if (sound === 'tag') { playTone(180, 'sawtooth', 0.12, 0, 60); playTone(520, 'square', 0.18, 0.08, 380); }
   else if (sound === 'roundstart') { playTone(440, 'square', 0.15, 0); playTone(440, 'square', 0.15, 0.25); playTone(440, 'square', 0.15, 0.5); playTone(880, 'sawtooth', 0.4, 0.75); }
   else if (sound === 'monke') { playTone(320, 'triangle', 0.14, 0, 480); playTone(340, 'triangle', 0.14, 0.18, 500); playTone(620, 'sawtooth', 0.28, 0.36, 260); }
   else if (sound === 'lava') { playTone(95, 'sawtooth', 0.5, 0, 45); playTone(1200, 'square', 0.25, 0.1, 300); }
   else if (sound === 'computer') { playTone(950, 'square', 0.06, 0); playTone(1250, 'square', 0.08, 0.07); }
   else if (sound === 'win') { playTone(523.25, 'square', 0.12, 0); playTone(659.25, 'square', 0.12, 0.12); playTone(783.99, 'square', 0.12, 0.24); playTone(1046.5, 'square', 0.35, 0.36); }
-  else if (sound === 'banshee') {
-    if (!isElementLoggedIn()) return triggerModToast("ELEMENT LOCKED", "SIGN IN WITH ELEMENT FOR VIP SOUNDS!");
-    playTone(900, 'sawtooth', 0.4, 0, 1450, 0.25); playTone(1450, 'sawtooth', 0.4, 0.4, 300, 0.25);
-  } else if (sound === 'airhorn') {
-    if (!isElementLoggedIn()) return triggerModToast("ELEMENT LOCKED", "SIGN IN WITH ELEMENT FOR VIP SOUNDS!");
-    playTone(480, 'sawtooth', 0.12, 0, null, 0.26); playTone(480, 'sawtooth', 0.12, 0.16, null, 0.26); playTone(480, 'sawtooth', 0.45, 0.32, 465, 0.26);
-  } else if (sound === 'shinyrock') {
-    if (!isElementLoggedIn()) return triggerModToast("ELEMENT LOCKED", "SIGN IN WITH ELEMENT FOR VIP SOUNDS!");
-    playTone(1174.66, 'sine', 0.15, 0, null, 0.24); playTone(1567.98, 'sine', 0.35, 0.12, null, 0.24);
-  }
+  else if (sound === 'banshee') { playTone(900, 'sawtooth', 0.4, 0, 1450, 0.25); playTone(1450, 'sawtooth', 0.4, 0.4, 300, 0.25); }
+  else if (sound === 'airhorn') { playTone(480, 'sawtooth', 0.12, 0, null, 0.26); playTone(480, 'sawtooth', 0.12, 0.16, null, 0.26); playTone(480, 'sawtooth', 0.45, 0.32, 465, 0.26); }
+  else if (sound === 'shinyrock') { playTone(1174.66, 'sine', 0.15, 0, null, 0.24); playTone(1567.98, 'sine', 0.35, 0.12, null, 0.24); }
 }
+
+window.playMonkeSound = playMonkeSound;
 window.STUMP_RANDOM_ROOM = "#stump-network-random:matrix.org";
 
 function isElementLoggedIn() {
@@ -77,12 +83,10 @@ function isElementLoggedIn() {
 
 const DEFAULT_MOD_CONFIG = {
   fov: 1.0, sat: 100, bright: 100, contrast: 100, gameVol: 100, menuVol: 100,
-  // Standard Mods
   leaderboard: true, termsfx: true, nightvision: false, crt: false, crosshair: false,
   fps: false, rainbow: false, deepfried: false, invert: false, retro: false,
   vignette: false, cinematic: false, lavavision: false, blueprint: false,
   speedlines: false, sessionclock: false, keystrokes: false, mirrorview: false,
-  // Element VIP Exclusive Mods
   rgbcrosshair: false, goldenui: false, chatnotify: false, vhsglitch: false,
   ultrafov: false, stumpbeacon: false, rgbhud: false, vipreticle: false,
   autohop: false, matrixrain: false
@@ -95,7 +99,6 @@ const MOD_LABELS = {
   retro: "GAMEBOY MODE", vignette: "TUNNEL VISION", cinematic: "CINEMATIC BARS",
   lavavision: "LAVA VISION", blueprint: "BLUEPRINT WIRE", speedlines: "SPEED LINES",
   sessionclock: "SESSION CLOCK", keystrokes: "KEYSTROKE HUD", mirrorview: "MIRROR WORLD",
-  // VIP Tab Exclusives
   rgbcrosshair: "RGB RETICLE", goldenui: "GOLD TERMINAL", chatnotify: "CHAT PING SFX",
   vhsglitch: "VHS TRACKING", ultrafov: "QUAKE PRO FOV", stumpbeacon: "ONLINE RADAR PING",
   rgbhud: "RAINBOW HUD BORDERS", vipreticle: "DIAMOND RETICLE",
@@ -179,7 +182,6 @@ function syncModUI() {
 
   const loggedIn = isElementLoggedIn();
 
-  // Toggle VIP Tab Lock Screen vs Unlocked VIP Controls
   document.getElementById("vip-locked-view")?.classList.toggle("gtag-hidden", loggedIn);
   document.getElementById("vip-unlocked-view")?.classList.toggle("gtag-hidden", !loggedIn);
 
@@ -206,7 +208,7 @@ function syncModUI() {
   if (aboutStatus) {
     aboutStatus.textContent = loggedIn
       ? `ELEMENT VIP (${localStorage.getItem("gtag_mx_user") || "VERIFIED"})`
-      : (sessionStorage.getItem("gtag_lb_guest_user") ? "GUEST ACCOUNT (VIP LOCKED)" : "SIGNED OUT");
+      : (localStorage.getItem("gtag_saved_guest_nick") ? `GUEST (${localStorage.getItem("gtag_saved_guest_nick")})` : "GUEST");
   }
 
   clearInterval(rainbowInterval);
