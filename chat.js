@@ -17,22 +17,7 @@ let activeHomeserver = localStorage.getItem('element_homeserver') || DEFAULT_HOM
 let nextBatch = "";
 let polling = false;
 
-// Bind button click directly so it always fires
-if (loginBtn) {
-  loginBtn.onclick = null; // Remove inline handler to avoid double firing
-  loginBtn.addEventListener('click', (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    loginElementAccount();
-  });
-}
-
-// Auto-resume session if already signed in
-if (accessToken && myUserId) {
-  enterStumpNetwork();
-}
-
-async function loginElementAccount() {
+window.loginElementAccount = async function() {
   const userField = userInput.value.trim();
   const passField = passInput.value;
 
@@ -49,19 +34,18 @@ async function loginElementAccount() {
   loginBtn.disabled = true;
 
   try {
-    // Support both "@user:matrix.org" and plain "user"
     let cleanUser = userField.replace(/^@/, '');
     activeHomeserver = DEFAULT_HOMESERVER;
 
     if (cleanUser.includes(':')) {
       const parts = cleanUser.split(':');
-      cleanUser = parts;
-      if (parts.toLowerCase() !== 'matrix.org') {
-        activeHomeserver = `https://${parts}`;
+      cleanUser = parts[0];
+      if (parts[1].toLowerCase() !== 'matrix.org') {
+        activeHomeserver = `https://${parts[1]}`;
       }
     }
 
-    loginError.textContent = `CONTACTING ${activeHomeserver}...`;
+    loginError.textContent = "CONTACTING MATRIX.ORG...";
 
     const res = await fetch(`${activeHomeserver}/_matrix/client/v3/login`, {
       method: "POST",
@@ -97,7 +81,7 @@ async function loginElementAccount() {
     loginBtn.textContent = "SIGN IN & JOIN";
     loginBtn.disabled = false;
   }
-}
+};
 
 window.logoutElementAccount = function() {
   accessToken = null;
@@ -109,6 +93,19 @@ window.logoutElementAccount = function() {
   loginBox.classList.remove('gtag-hidden');
   msgBox.innerHTML = '<div class="chat-line" style="color:#888;">* LOGGED OUT *</div>';
 };
+
+if (loginBtn) {
+  loginBtn.onclick = null;
+  loginBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    window.loginElementAccount();
+  });
+}
+
+if (accessToken && myUserId) {
+  enterStumpNetwork();
+}
 
 async function enterStumpNetwork() {
   loginBox.classList.add('gtag-hidden');
@@ -134,7 +131,7 @@ async function enterStumpNetwork() {
         loginError.textContent = "SESSION EXPIRED - SIGN IN AGAIN.";
         return;
       }
-      throw new Error(joinData.error || "Could not join room (check if room is public)");
+      throw new Error(joinData.error || "Could not join room");
     }
 
     appendMessage("SYSTEM", "CONNECTED TO STUMP NETWORK!");
@@ -162,7 +159,7 @@ async function pollStumpMessages() {
       const roomTimeline = data.rooms?.join?.[STUMP_ROOM_ID]?.timeline?.events || [];
       for (const ev of roomTimeline) {
         if (ev.type === "m.room.message" && ev.content?.body) {
-          const shortUser = ev.sender.split(":").replace("@", "");
+          const shortUser = ev.sender.split(':')[0].replace('@', '');
           appendMessage(shortUser, ev.content.body);
         }
       }
@@ -208,7 +205,7 @@ passInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter') {
     e.preventDefault();
     e.stopImmediatePropagation();
-    loginElementAccount();
+    window.loginElementAccount();
   }
 }, true);
 
