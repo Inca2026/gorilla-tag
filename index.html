@@ -201,5 +201,67 @@
   <script src="ui-keybinds.js"></script>
   <script src="chat.js"></script>
   <!-- Keep your existing Unity loader script below this line -->
+    <script>
+    (async function bootGorillaTagUnity() {
+      const buildDir = "Build"; // Change to "." if these files are in the root folder instead of /Build/
+      const statusEl = document.getElementById("gtag-load-status");
+      const barEl = document.getElementById("gtag-bar-inner");
+      const loadingScreen = document.getElementById("gtag-loading");
+      const canvas = document.getElementById("unity-canvas");
+
+      function setProgress(pct, label) {
+        if (barEl) barEl.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+        if (statusEl && label) statusEl.textContent = label;
+      }
+
+      try {
+        // 1. Download & stitch gtagwebR2.data.unityweb.part1 .. part8
+        const totalParts = 8;
+        const chunks = [];
+        for (let i = 1; i <= totalParts; i++) {
+          setProgress((i / totalParts) * 60, `LOADING GAME DATA (${i}/${totalParts})...`);
+          const res = await fetch(`${buildDir}/gtagwebR2.data.unityweb.part${i}`);
+          if (!res.ok) throw new Error(`Missing data part ${i} (${res.status})`);
+          chunks.push(await res.arrayBuffer());
+        }
+
+        const mergedDataBlob = new Blob(chunks, { type: "application/octet-stream" });
+        const mergedDataUrl = URL.createObjectURL(mergedDataBlob);
+
+        // 2. Load gtagwebR2.loader.js
+        setProgress(65, "INITIALIZING UNITY LOADER...");
+        await new Promise((resolve, reject) => {
+          const script = document.createElement("script");
+          script.src = `${buildDir}/gtagwebR2.loader.js`;
+          script.onload = resolve;
+          script.onerror = () => reject(new Error("Failed to load gtagwebR2.loader.js"));
+          document.body.appendChild(script);
+        });
+        // 3. Boot Unity instance with stitched data URL
+        const config = {
+          dataUrl: mergedDataUrl,
+          frameworkUrl: `${buildDir}/gtagwebR2.framework.js.unityweb`,
+          codeUrl: `${buildDir}/gtagwebR2.wasm.unityweb`,
+          streamingAssetsUrl: "StreamingAssets",
+          companyName: "Another Axiom",
+          productName: "Gorilla Tag Web",
+          productVersion: "1.0"
+        };
+
+        await createUnityInstance(canvas, config, (progress) => {
+          const pct = 65 + Math.round(progress * 35);
+          setProgress(pct, `BOOTING MONKE ENGINE... ${pct}%`);
+        });
+
+        URL.revokeObjectURL(mergedDataUrl);
+        if (loadingScreen) loadingScreen.classList.add("gtag-hidden");
+      } catch (err) {
+        console.error(err);
+        setProgress(100, `BOOT ERROR: ${err.message}`);
+        if (statusEl) statusEl.style.color = "#ff4444";
+      }
+    })();
+  </script>
 </body>
 </html>
+
