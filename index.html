@@ -5,13 +5,18 @@
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <title>Gorilla Tag Web</title>
   <link href="https://googleapis.com" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=55">
+  <link rel="stylesheet" href="style.css?v=60">
 </head>
 <body>
 
-  <!-- Optional CRT Scanline & Crosshair Overlays -->
+  <!-- Optional CRT Scanline, Crosshair, Vignette & Cinematic Overlays -->
   <div id="crt-overlay" class="gtag-hidden"></div>
   <div id="gtag-crosshair" class="gtag-hidden">+</div>
+  <div id="gtag-vignette" class="gtag-hidden"></div>
+  <div id="gtag-cinematic" class="gtag-hidden">
+    <div class="gtag-bar-top"></div>
+    <div class="gtag-bar-bottom"></div>
+  </div>
 
   <!-- Unity Container -->
   <div id="unity-container">
@@ -35,7 +40,7 @@
   <div id="gtag-overlay" class="gtag-hidden">
     <div class="gtag-terminal">
       <div class="gtag-header">
-        <span>GORILLA OS v2.0 // [TAB] CLOSE</span>
+        <span>GORILLA OS v3.0 // [TAB] CLOSE</span>
         <div>
           <button id="btn-tab-chat" class="gtag-btn active" type="button" onclick="switchTab('chat')">CHAT</button>
           <button id="btn-tab-sounds" class="gtag-btn" type="button" onclick="switchTab('sounds')">SOUNDS</button>
@@ -84,7 +89,6 @@
           </div>
         </div>
       </div>
-
       <!-- Gorilla Tag Retro Soundboard -->
       <div id="tab-sounds" class="gtag-hidden">
         <div style="font-size:8px; color:#888; margin-bottom:12px;">
@@ -102,14 +106,42 @@
 
       <!-- Visual & HUD Mods Tab -->
       <div id="tab-mods" class="gtag-hidden">
-        <div style="font-size:8px; color:#888; margin-bottom:12px;">
-          GORILLA OS CLIENT TWEAKS
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+          <span style="font-size:8px; color:#888;">GORILLA OS MOD MENU v3.0</span>
+          <div style="display:flex; gap:6px;">
+            <button id="btn-save-mods" class="gtag-btn" type="button" style="font-size:7px; padding:4px 6px;" onclick="saveModConfig()">SAVE CONFIG</button>
+            <button id="btn-reset-mods" class="gtag-btn" type="button" style="font-size:7px; padding:4px 6px;" onclick="resetAllMods()">RESET</button>
+          </div>
         </div>
-        <div style="display:flex; flex-direction:column; gap:10px;">
+
+        <!-- Sliders: FOV Zoom, Saturation, Brightness -->
+        <div class="gtag-slider-box">
+          <div class="gtag-slider-row">
+            <span>FOV ZOOM: <span id="val-fov">1.00x</span></span>
+            <input type="range" id="slider-fov" min="1.0" max="1.6" step="0.05" value="1.0" oninput="updateSliderMod('fov', this.value)">
+          </div>
+          <div class="gtag-slider-row">
+            <span>SATURATION: <span id="val-sat">100%</span></span>
+            <input type="range" id="slider-sat" min="0" max="300" step="10" value="100" oninput="updateSliderMod('sat', this.value)">
+          </div>
+          <div class="gtag-slider-row">
+            <span>BRIGHTNESS: <span id="val-bright">100%</span></span>
+            <input type="range" id="slider-bright" min="50" max="220" step="10" value="100" oninput="updateSliderMod('bright', this.value)">
+          </div>
+        </div>
+
+        <!-- Toggleable Mods Grid -->
+        <div class="gtag-mod-grid">
           <button id="mod-nightvision" class="gtag-btn" type="button" onclick="toggleMod('nightvision')">NIGHT VISION: OFF</button>
           <button id="mod-crt" class="gtag-btn" type="button" onclick="toggleMod('crt')">CRT SCANLINES: OFF</button>
-          <button id="mod-crosshair" class="gtag-btn" type="button" onclick="toggleMod('crosshair')">CENTER CROSSHAIR: OFF</button>
-          <button id="mod-fps" class="gtag-btn" type="button" onclick="toggleMod('fps')">LIVE FPS COUNTER: OFF</button>
+          <button id="mod-crosshair" class="gtag-btn" type="button" onclick="toggleMod('crosshair')">CROSSHAIR: OFF</button>
+          <button id="mod-fps" class="gtag-btn" type="button" onclick="toggleMod('fps')">FPS COUNTER: OFF</button>
+          <button id="mod-rainbow" class="gtag-btn" type="button" onclick="toggleMod('rainbow')">RGB MONKE: OFF</button>
+          <button id="mod-deepfried" class="gtag-btn" type="button" onclick="toggleMod('deepfried')">DEEP FRIED: OFF</button>
+          <button id="mod-invert" class="gtag-btn" type="button" onclick="toggleMod('invert')">X-RAY INVERT: OFF</button>
+          <button id="mod-retro" class="gtag-btn" type="button" onclick="toggleMod('retro')">GAMEBOY MODE: OFF</button>
+          <button id="mod-vignette" class="gtag-btn" type="button" onclick="toggleMod('vignette')">TUNNEL VISION: OFF</button>
+          <button id="mod-cinematic" class="gtag-btn" type="button" onclick="toggleMod('cinematic')">CINEMATIC BARS: OFF</button>
         </div>
       </div>
 
@@ -117,9 +149,9 @@
   </div>
 
   <!-- Separate Modular Scripts -->
-  <script src="ui-keybinds.js?v=55"></script>
-  <script src="soundboard.js?v=55"></script>
-  <script src="chat.js?v=55"></script>
+  <script src="ui-keybinds.js?v=60"></script>
+  <script src="soundboard.js?v=60"></script>
+  <script src="chat.js?v=60"></script>
 
   <!-- Unity 8-Part Loader -->
   <script>
