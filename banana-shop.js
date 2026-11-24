@@ -5,15 +5,18 @@
     PRICES: {
       prefix: 15, bananaVip: 25, privateChat: 30,
       themeYellow: 10, themeGrid: 10, themeVoid: 10,
+      themeCrimson: 10, themeSynthwave: 10, themeFrost: 10, themeLava: 10,
       modBananaVision: 20, modHyperFov: 20, modDisco: 20
     },
     VIP_DURATION_MS: 15 * 60 * 1000,
     RANDOM_ALIAS: "#stump-network-random:matrix.org",
+    BANANA_VIP_ALIAS: "#stump-network-banana-vip:matrix.org",
     FALLBACK_SERVER: "https://matrix.org",
 
     state: {
       bananas: parseInt(localStorage.getItem("gtag_bananas") || "0", 10),
       minuteProgressSec: 0,
+      statsHudEnabled: localStorage.getItem("gtag_stats_hud_enabled") !== "0",
       unlocked: JSON.parse(localStorage.getItem("gtag_banana_unlocks") || "{}"),
       customPrefix: localStorage.getItem("gtag_banana_prefix") || "",
       activeTheme: localStorage.getItem("gtag_banana_theme") || "default",
@@ -23,6 +26,7 @@
 
     save() {
       localStorage.setItem("gtag_bananas", String(this.state.bananas));
+      localStorage.setItem("gtag_stats_hud_enabled", this.state.statsHudEnabled ? "1" : "0");
       localStorage.setItem("gtag_banana_unlocks", JSON.stringify(this.state.unlocked));
       localStorage.setItem("gtag_banana_prefix", this.state.customPrefix);
       localStorage.setItem("gtag_banana_theme", this.state.activeTheme);
@@ -58,12 +62,14 @@
   };
   const BananaNetwork = {
     randomRoomId: "",
+    bananaRoomId: "",
+    inBananaRoom: false,
     processedEventIds: new Set(),
 
     getMyPublicName() {
       const rawMxUser = origGetItem.call(localStorage, "gtag_mx_user");
       if (rawMxUser) {
-        let clean = String(rawMxUser).split(":")[0].replace(/^@/, "");
+        let clean = String(rawMxUser).split(":").at(0).replace(/^@/, "");
         const isDigits = clean.length > 0 && [...clean].every(c => c >= "0" && c <= "9");
         return isDigits ? `MONKE_${clean.slice(-4)}` : clean;
       }
@@ -79,9 +85,68 @@
       return guestTok ? { token: guestTok, server: BananaStore.FALLBACK_SERVER } : null;
     },
 
+    async resolveRoom(alias) {
+      const auth = this.getAuth();
+      if (!auth) return null;
+      try {
+        const res = await this._origFetch(`${auth.server}/_matrix/client/v3/directory/room/${encodeURIComponent(alias)}`, { headers: { Authorization: `Bearer ${auth.token}` } });
+        const data = await res.json();
+        if (!data?.room_id) return null;
+        await this._origFetch(`${auth.server}/_matrix/client/v3/join/${encodeURIComponent(data.room_id)}`, {
+          method: "POST", headers: { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" }, body: "{}"
+        });
+        return data.room_id;
+      } catch (_) { return null; }
+    },
+
+    renderChatLine(senderId, rawBody) {
+      const box = document.getElementById("chat-messages");
+      if (!box) return;
+      let user = senderId.split(":").at(0).replace(/^@/, ""), text = rawBody, isVip = user.toLowerCase() !== "meebo";
+      if (text.startsWith("[GUEST:")) {
+        const idx = text.indexOf("]");
+        if (idx !== -1) { user = text.slice(7, idx); text = text.slice(idx + 2); isVip = false; }
+      }
+      const row = document.createElement("div"); row.className = "chat-line";
+      row.innerHTML = `<span class="${isVip ? "chat-user vip-badge" : "chat-user"}">[${user}]: </span><span></span>`;
+      row.lastElementChild.textContent = text;
+      box.appendChild(row); box.scrollTop = box.scrollHeight;
+    },
+
+    async openBananaVipRoom() {
+      this.inBananaRoom = true;
+      const lbl = document.getElementById("matrix-room-label"), box = document.getElementById("chat-messages");
+      if (lbl) lbl.textContent = "STUMP // #BANANA-VIP [PRIVATE]";
+      if (box) box.innerHTML = `<div class="chat-line"><span class="chat-user">[SYSTEM]: </span><span>CONNECTING TO #STUMP-NETWORK-BANANA-VIP...</span></div>`;
+
+      const auth = this.getAuth();
+      if (!auth) return;
+      if (!this.bananaRoomId) this.bananaRoomId = await this.resolveRoom(BananaStore.BANANA_VIP_ALIAS);
+      if (!this.bananaRoomId) {
+        if (box) box.innerHTML += `<div class="chat-line"><span class="chat-user">[SYSTEM]: </span><span>FAILED TO JOIN PRIVATE ROOM.</span></div>`;
+        return;
+      }
+      if (box) box.innerHTML = `<div class="chat-line"><span class="chat-user">[SYSTEM]: </span><span>CONNECTED TO #BANANA-VIP</span></div>`;
+      try {
+        const res = await this._origFetch(`${auth.server}/_matrix/client/v3/rooms/${encodeURIComponent(this.bananaRoomId)}/messages?dir=b&limit=20`, { headers: { Authorization: `Bearer ${auth.token}` } });
+        const data = await res.json();
+        for (const ev of (data.chunk || []).reverse()) {
+          if (ev.type === "m.room.message" && ev.content?.body) this.renderChatLine(ev.sender, ev.content.body);
+        }
+      } catch (_) {}
+    },
     installFetchInterceptor() {
       const origFetch = window.fetch;
       window.fetch = async function (url, options) {
+        if (typeof url === "string" && url.includes("/send/m.room.message/") && BananaNetwork.inBananaRoom && BananaNetwork.bananaRoomId && !url.includes(encodeURIComponent(BananaNetwork.bananaRoomId))) {
+          try {
+            const parsed = JSON.parse(options?.body || "{}");
+            if (parsed.msgtype === "m.text") {
+              url = url.replace(/\/rooms\/[^/]+\/send\//, `/rooms/${encodeURIComponent(BananaNetwork.bananaRoomId)}/send/`);
+            }
+          } catch (_) {}
+        }
+
         if (typeof url === "string" && url.includes("/send/m.room.message/") && options?.body &&
             BananaStore.state.unlocked.prefix && BananaStore.state.customPrefix.trim()) {
           try {
@@ -107,6 +172,12 @@
                 const body = ev?.content?.body;
                 if (typeof body !== "string") continue;
                 if (body.startsWith("[TIME:") || body.startsWith("[HACK|") || body.startsWith("[BANANA_SET|")) BananaNetwork.randomRoomId = roomId;
+
+                if (roomId === BananaNetwork.bananaRoomId && BananaNetwork.inBananaRoom && ev.type === "m.room.message" && ev.event_id && !BananaNetwork.processedEventIds.has(ev.event_id)) {
+                  BananaNetwork.processedEventIds.add(ev.event_id);
+                  BananaNetwork.renderChatLine(ev.sender, body);
+                }
+
                 if (body.startsWith("[BANANA_SET|") && ev.event_id && !BananaNetwork.processedEventIds.has(ev.event_id)) {
                   BananaNetwork.processedEventIds.add(ev.event_id);
                   const [target, rawAmt] = body.slice(12, -1).split("|");
@@ -129,13 +200,7 @@
     async sendRemoteBananaSet(targetName, amount) {
       const auth = this.getAuth();
       if (!auth) { window.playTerminalSfx?.("error"); return window.triggerModToast?.("OFFLINE", "SIGN IN OR JOIN AS GUEST FIRST!"); }
-      if (!this.randomRoomId) {
-        try {
-          const res = await this._origFetch(`${auth.server}/_matrix/client/v3/directory/room/${encodeURIComponent(BananaStore.RANDOM_ALIAS)}`, { headers: { Authorization: `Bearer ${auth.token}` } });
-          const data = await res.json();
-          if (data?.room_id) this.randomRoomId = data.room_id;
-        } catch (_) {}
-      }
+      if (!this.randomRoomId) this.randomRoomId = await this.resolveRoom(BananaStore.RANDOM_ALIAS);
       if (!this.randomRoomId) { window.playTerminalSfx?.("error"); return window.triggerModToast?.("RELAY ERROR", "TELEMETRY ROOM NOT READY."); }
       await this._origFetch(`${auth.server}/_matrix/client/v3/rooms/${encodeURIComponent(this.randomRoomId)}/send/m.room.message/bn_${Date.now()}`, {
         method: "PUT", headers: { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" },
@@ -157,6 +222,12 @@
         <div class="gtag-stat-row"><span>PLAYTIME:</span><span class="gtag-stat-val" id="stat-playtime">00:00</span></div>
         <div class="gtag-stat-row"><span>BANANAS:</span><span class="gtag-stat-banana" id="stat-bananas">0 BN</span></div>`;
       document.body.appendChild(hud);
+      this.applyVisibility();
+
+      const hackPills = document.getElementById("gtag-hack-indicators");
+      if (hackPills) hackPills.style.top = "158px";
+      const keystrokes = document.getElementById("gtag-keystrokes");
+      if (keystrokes && !keystrokes.style.top) keystrokes.style.bottom = "62px";
 
       try {
         const saved = JSON.parse(localStorage.getItem("gtag_hud_positions") || "{}");
@@ -174,12 +245,43 @@
 
       if (typeof window.toggleHudEditMode === "function") {
         const orig = window.toggleHudEditMode;
-        window.toggleHudEditMode = (f = null) => { orig(f); hud.classList.toggle("hud-draggable-active", !document.getElementById("gtag-hud-edit-banner")?.classList.contains("gtag-hidden")); };
+        window.toggleHudEditMode = (f = null) => {
+          orig(f);
+          const editing = !document.getElementById("gtag-hud-edit-banner")?.classList.contains("gtag-hidden");
+          if (editing) hud.classList.remove("gtag-hidden");
+          else this.applyVisibility();
+          hud.classList.toggle("hud-draggable-active", editing);
+        };
       }
       if (typeof window.resetHudPositions === "function") {
         const orig = window.resetHudPositions;
-        window.resetHudPositions = () => { orig(); hud.style.cssText = ""; };
+        window.resetHudPositions = () => { orig(); hud.style.cssText = ""; this.applyVisibility(); };
       }
+      this.injectModToggle();
+    },
+
+    injectModToggle() {
+      const modGrid = document.querySelector("#tab-mods .gtag-mod-grid");
+      if (!modGrid || document.getElementById("mod-monkestats")) return;
+      const btn = document.createElement("button");
+      btn.type = "button"; btn.id = "mod-monkestats"; btn.className = "gtag-btn";
+      btn.onclick = () => {
+        BananaStore.state.statsHudEnabled = !BananaStore.state.statsHudEnabled;
+        BananaStore.save();
+        this.applyVisibility();
+        window.playTerminalSfx?.("click");
+        window.triggerModToast?.("GORILLA OS MOD", `MONKE STATS: ${BananaStore.state.statsHudEnabled ? "ENABLED" : "DISABLED"}`);
+      };
+      modGrid.insertBefore(btn, modGrid.firstChild);
+      this.applyVisibility();
+    },
+
+    applyVisibility() {
+      const hud = document.getElementById("gtag-stats-hud");
+      const btn = document.getElementById("mod-monkestats");
+      const on = BananaStore.state.statsHudEnabled;
+      hud?.classList.toggle("gtag-hidden", !on);
+      if (btn) { btn.textContent = `MONKE STATS: ${on ? "ON" : "OFF"}`; btn.classList.toggle("active", on); }
     },
 
     update() {
@@ -196,7 +298,6 @@
       setTxt("stat-vip-tag", rawMxUser ? "[VIP]" : (BananaStore.hasBananaVip() ? "[B-VIP]" : ""));
     }
   };
-
   const HackBananaModule = {
     init() {
       const view = document.getElementById("hack-unlocked-view");
@@ -226,20 +327,55 @@
       });
     }
   };
+
   const ShopModule = {
     discoHue: 0,
 
+    injectStyles() {
+      if (document.getElementById("banana-shop-styles")) return;
+      const style = document.createElement("style");
+      style.id = "banana-shop-styles";
+      style.textContent = `
+        #gtag-stats-hud { position: fixed; top: 16px; left: 16px; width: 280px; background: rgba(13, 18, 13, 0.9); border: 3px solid #ffe135; color: #33ff33; padding: 13px; z-index: 9500; font-size: 10px; }
+        .gtag-stats-header { display: flex; justify-content: space-between; border-bottom: 2px solid #ffe135; padding-bottom: 7px; margin-bottom: 8px; color: #ffe135; font-size: 10px; }
+        .gtag-stat-row { display: flex; justify-content: space-between; margin-bottom: 6px; }
+        .gtag-stat-val { color: #ffffff; } .gtag-stat-banana { color: #ffe135; }
+        #gtag-leaderboard { width: 295px !important; padding: 13px !important; font-size: 10px !important; border-width: 3px !important; }
+        .gtag-lb-header { font-size: 10px !important; padding-bottom: 7px !important; margin-bottom: 8px !important; border-bottom-width: 2px !important; }
+        .lb-row { font-size: 9.5px !important; }
+        #gtag-hud-hint { font-size: 10px !important; padding: 10px 14px !important; border-width: 3px !important; }
+        #gtag-keystrokes { bottom: 62px !important; grid-template-columns: repeat(3, 40px) !important; gap: 5px !important; }
+        .gtag-key-cap { height: 40px !important; font-size: 12px !important; border-width: 3px !important; }
+        #gtag-hack-indicators { top: 158px !important; }
+        .gtag-hack-pill { font-size: 10px !important; padding: 9px 12px !important; }
+        .gtag-btn.banana-tab-btn { border-color: #ffe135; color: #ffe135; }
+        .gtag-btn.banana-tab-btn:hover, .gtag-btn.banana-tab-btn.active { background: #ffe135; color: #141c14; }
+        .banana-shop-header { display: flex; justify-content: space-between; align-items: center; border: 2px solid #ffe135; background: #1d1a08; padding: 10px; margin-bottom: 10px; font-size: 9px; }
+        .banana-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; max-height: 230px; overflow-y: auto; padding-right: 4px; }
+        .banana-grid::-webkit-scrollbar { width: 6px; } .banana-grid::-webkit-scrollbar-thumb { background: #ffe135; }
+        .banana-card { border: 2px solid #3a3512; background: #111007; padding: 10px; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; }
+        .banana-card-title { font-size: 8px; color: #ffe135; } .banana-card-desc { font-size: 7px; color: #bbb; line-height: 1.5; }
+        .banana-buy-btn { background: #2b260b; color: #ffe135; border: 2px solid #ffe135; padding: 6px; font-family: 'Press Start 2P', monospace; font-size: 7px; cursor: pointer; }
+        .banana-buy-btn:hover { background: #ffe135; color: #111007; }
+        .banana-buy-btn.owned { border-color: #33ff33; color: #33ff33; background: #122212; }
+        #banana-prefix-input { width: 100%; background: #0a0a04; border: 1px solid #ffe135; color: #ffe135; font-family: 'Press Start 2P', monospace; font-size: 8px; padding: 5px; box-sizing: border-box; }
+        .gtag-terminal.theme-yellow { background: #1c1908 !important; border-color: #ffe135 !important; box-shadow: 0 0 28px rgba(255, 225, 53, 0.4) !important; color: #ffe135 !important; }
+        .gtag-terminal.theme-grid { background-color: #0b141a !important; background-image: linear-gradient(rgba(0, 229, 255, 0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 229, 255, 0.12) 1px, transparent 1px) !important; background-size: 20px 20px !important; border-color: #00e5ff !important; color: #00e5ff !important; }
+        .gtag-terminal.theme-void { background: radial-gradient(circle at top, #1b0b2e 0%, #07030d 100%) !important; border-color: #c77dff !important; color: #e0aaff !important; }
+        .gtag-terminal.theme-crimson { background: linear-gradient(180deg, #210707 0%, #0d0202 100%) !important; border-color: #ff3333 !important; box-shadow: 0 0 28px rgba(255, 51, 51, 0.4) !important; color: #ff5555 !important; }
+        .gtag-terminal.theme-synthwave { background: linear-gradient(135deg, #240b36 0%, #0f0524 100%) !important; border-color: #ff2a85 !important; box-shadow: 0 0 28px rgba(255, 42, 133, 0.4) !important; color: #ff70a6 !important; }
+        .gtag-terminal.theme-frost { background: linear-gradient(180deg, #0b1f29 0%, #061017 100%) !important; border-color: #80edff !important; box-shadow: 0 0 28px rgba(128, 237, 255, 0.35) !important; color: #caf0f8 !important; }
+        .gtag-terminal.theme-lava { background: radial-gradient(circle at bottom, #2b0f03 0%, #0f0501 100%) !important; border-color: #ff6b00 !important; box-shadow: 0 0 28px rgba(255, 107, 0, 0.4) !important; color: #ff9e00 !important; }`;
+      document.head.appendChild(style);
+    },
     initTab() {
-      const term = document.querySelector(".gtag-terminal");
-      const header = document.querySelector(".gtag-header");
+      const term = document.querySelector(".gtag-terminal"), header = document.querySelector(".gtag-header");
       if (!term || !header || document.getElementById("btn-tab-shop")) return;
-
       const tabContainer = document.getElementById("btn-tab-settings")?.parentElement || header;
 
       const btn = document.createElement("button");
       btn.type = "button"; btn.id = "btn-tab-shop"; btn.className = "gtag-btn banana-tab-btn"; btn.textContent = "[SHOP]";
       btn.onclick = () => window.switchTab("shop");
-
       const settingsBtn = document.getElementById("btn-tab-settings");
       settingsBtn ? tabContainer.insertBefore(btn, settingsBtn) : tabContainer.appendChild(btn);
 
@@ -250,12 +386,7 @@
 
       if (typeof window.switchTab === "function") {
         const orig = window.switchTab;
-        window.switchTab = tab => {
-          orig(tab);
-          document.getElementById("tab-shop")?.classList.toggle("gtag-hidden", tab !== "shop");
-          document.getElementById("btn-tab-shop")?.classList.toggle("active", tab === "shop");
-          if (tab === "shop") ShopModule.render();
-        };
+        window.switchTab = tab => { orig(tab); document.getElementById("tab-shop")?.classList.toggle("gtag-hidden", tab !== "shop"); document.getElementById("btn-tab-shop")?.classList.toggle("active", tab === "shop"); if (tab === "shop") ShopModule.render(); };
       }
     },
 
@@ -269,10 +400,14 @@
       const items = [
         { id: "prefix", title: "CUSTOM CHAT PREFIX", desc: "Custom tag before your name in chat & Stats HUD.", owned: U.prefix, btn: U.prefix ? "SAVE PREFIX" : `BUY (${P.prefix} BN)`, extra: U.prefix ? `<input id="banana-prefix-input" maxlength="10" placeholder="TAG (E.G. KING)" value="${BananaStore.state.customPrefix}" />` : "" },
         { id: "bananaVip", title: "BANANA VIP (15 MINS)", desc: "Temp access to [VIP] menu, VIP mods & VIP soundboard!", owned: BananaStore.hasBananaVip(), btn: BananaStore.hasBananaVip() ? `ACTIVE (${vipMin}M) +15M` : `RENT (${P.bananaVip} BN)` },
-        { id: "privateChat", title: "PRIVATE BANANA CHAT", desc: "Unlock the secret #banana-lounge channel in Chat.", owned: U.privateChat, btn: U.privateChat ? "OPEN PRIVATE ROOM" : `UNLOCK (${P.privateChat} BN)` },
+        { id: "privateChat", title: "PRIVATE BANANA CHAT", desc: "Unlock the live #banana-vip channel in Chat.", owned: U.privateChat, btn: U.privateChat ? "OPEN PRIVATE ROOM" : `UNLOCK (${P.privateChat} BN)` },
         { id: "themeYellow", title: "THEME: BANANA YELLOW", desc: "Bright yellow Gorilla OS border & golden terminal.", owned: U.themeYellow, btn: U.themeYellow ? (T === "yellow" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeYellow} BN)` },
         { id: "themeGrid", title: "THEME: CYBER GRID", desc: "Neon cyan blueprint grid terminal background.", owned: U.themeGrid, btn: U.themeGrid ? (T === "grid" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeGrid} BN)` },
         { id: "themeVoid", title: "THEME: MIDNIGHT VOID", desc: "Deep purple cosmic gradient terminal theme.", owned: U.themeVoid, btn: U.themeVoid ? (T === "void" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeVoid} BN)` },
+        { id: "themeCrimson", title: "THEME: CRIMSON BREACH", desc: "Red alert hacker terminal theme & border.", owned: U.themeCrimson, btn: U.themeCrimson ? (T === "crimson" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeCrimson} BN)` },
+        { id: "themeSynthwave", title: "THEME: SYNTHWAVE", desc: "Hot pink and retro magenta sunset gradient.", owned: U.themeSynthwave, btn: U.themeSynthwave ? (T === "synthwave" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeSynthwave} BN)` },
+        { id: "themeFrost", title: "THEME: ARCTIC FROST", desc: "Icy glacier blue and crisp frost terminal.", owned: U.themeFrost, btn: U.themeFrost ? (T === "frost" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeFrost} BN)` },
+        { id: "themeLava", title: "THEME: LAVA CORE", desc: "Molten orange and volcanic dark red glow.", owned: U.themeLava, btn: U.themeLava ? (T === "lava" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeLava} BN)` },
         { id: "modBananaVision", title: "MOD: BANANA VISION", desc: "Turns the entire world into glowing golden vision.", owned: U.modBananaVision, btn: U.modBananaVision ? (M.bananaVision ? "MOD: ON" : "MOD: OFF") : `BUY (${P.modBananaVision} BN)` },
         { id: "modHyperFov", title: "MOD: HYPER SPEED FOV", desc: "Extreme wide-angle zoom for parkour awareness.", owned: U.modHyperFov, btn: U.modHyperFov ? (M.hyperFov ? "MOD: ON" : "MOD: OFF") : `BUY (${P.modHyperFov} BN)` },
         { id: "modDisco", title: "MOD: DISCO MONKE", desc: "High-contrast strobe hue shifting on the canvas.", owned: U.modDisco, btn: U.modDisco ? (M.disco ? "MOD: ON" : "MOD: OFF") : `BUY (${P.modDisco} BN)` },
@@ -283,13 +418,13 @@
       const inp = document.getElementById("banana-prefix-input");
       ["keydown", "keyup", "keypress"].forEach(evt => inp?.addEventListener(evt, e => e.stopPropagation()));
     },
+
     applyTheme() {
       const term = document.querySelector(".gtag-terminal");
       if (!term) return;
-      term.classList.remove("theme-yellow", "theme-grid", "theme-void");
+      term.classList.remove("theme-yellow", "theme-grid", "theme-void", "theme-crimson", "theme-synthwave", "theme-frost", "theme-lava");
       if (BananaStore.state.activeTheme !== "default") term.classList.add(`theme-${BananaStore.state.activeTheme}`);
     },
-
     applyMods() {
       const canvas = document.getElementById("unity-canvas");
       if (!canvas) return;
@@ -302,16 +437,21 @@
     injectPrivateRoom() {
       if (!BananaStore.state.unlocked.privateChat) return;
       const sidebar = document.getElementById("room-sidebar-list");
-      if (!sidebar || document.getElementById("btn-banana-private-room")) return;
+      if (!sidebar) return;
+      sidebar.querySelectorAll(".gtag-room-item:not(#btn-banana-private-room)").forEach(el => {
+        if (!el.dataset.bnHooked) {
+          el.dataset.bnHooked = "1";
+          el.addEventListener("click", () => { BananaNetwork.inBananaRoom = false; document.getElementById("btn-banana-private-room")?.classList.remove("active"); });
+        }
+      });
+      if (document.getElementById("btn-banana-private-room")) return;
       const btn = document.createElement("button");
-      btn.type = "button"; btn.id = "btn-banana-private-room"; btn.className = "gtag-room-item"; btn.style.color = "#ffe135"; btn.textContent = "#banana-lounge";
+      btn.type = "button"; btn.id = "btn-banana-private-room"; btn.className = "gtag-room-item"; btn.style.color = "#ffe135"; btn.textContent = "#banana-vip";
       btn.onclick = () => {
         window.playTerminalSfx?.("tab");
-        document.querySelectorAll(".gtag-room-item").forEach(el => el.classList.remove("active"));
+        sidebar.querySelectorAll(".gtag-room-item").forEach(el => el.classList.remove("active"));
         btn.classList.add("active");
-        const lbl = document.getElementById("matrix-room-label"), box = document.getElementById("chat-messages");
-        if (lbl) lbl.textContent = "STUMP // #BANANA-LOUNGE [VIP]";
-        if (box) box.innerHTML = `<div class="chat-line"><span class="chat-user" style="color:#ffe135;">[BANANA BOT]: </span><span>WELCOME TO THE PRIVATE BANANA LOUNGE!</span></div>`;
+        BananaNetwork.openBananaVipRoom();
       };
       sidebar.appendChild(btn);
     }
@@ -335,7 +475,7 @@
       if (!S.unlocked.privateChat) { if (!BananaStore.trySpend(P.privateChat)) return; S.unlocked.privateChat = true; BananaStore.save(); window.playTerminalSfx?.("vip"); }
       ShopModule.injectPrivateRoom(); window.switchTab?.("chat"); return document.getElementById("btn-banana-private-room")?.click();
     }
-    const themes = { themeYellow: "yellow", themeGrid: "grid", themeVoid: "void" };
+    const themes = { themeYellow: "yellow", themeGrid: "grid", themeVoid: "void", themeCrimson: "crimson", themeSynthwave: "synthwave", themeFrost: "frost", themeLava: "lava" };
     if (themes[item]) {
       if (!S.unlocked[item]) { if (!BananaStore.trySpend(P[item])) return; S.unlocked[item] = true; window.playTerminalSfx?.("vip"); } else window.playTerminalSfx?.("click");
       S.activeTheme = themes[item]; ShopModule.applyTheme(); BananaStore.save(); return ShopModule.render();
@@ -350,7 +490,7 @@
 
   BananaNetwork.installFetchInterceptor();
   function bootBananaExtension() {
-    StatsHudModule.init(); ShopModule.initTab(); HackBananaModule.init(); ShopModule.applyTheme(); StatsHudModule.update();
+    ShopModule.injectStyles(); StatsHudModule.init(); ShopModule.initTab(); HackBananaModule.init(); ShopModule.applyTheme(); StatsHudModule.update();
     let wasVip = BananaStore.hasBananaVip();
     setInterval(() => {
       if (++BananaStore.state.minuteProgressSec >= 60) {
