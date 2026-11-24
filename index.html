@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gorilla Tag Web</title>
+  <link rel="preconnect" href="https://googleapis.com" />
+  <link href="https://googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=8" />
+</head>
+<body>
+  <div id="unity-container">
+    <canvas id="unity-canvas"></canvas>
+    <div id="gtag-loading">
+      <div id="gtag-load-status">GORILLA OS BOOTING...</div>
+      <div class="gtag-bar-outer"><div id="gtag-bar-inner"></div></div>
+    </div>
+  </div>
+
+  <div id="crt-overlay" class="gtag-hidden"></div>
+  <div id="gtag-crosshair" class="gtag-hidden">+</div>
+  <div id="gtag-vignette" class="gtag-hidden"></div>
+  <div id="gtag-speedlines" class="gtag-hidden"></div>
+  <div id="gtag-cinematic" class="gtag-hidden"><div class="gtag-bar-top"></div><div class="gtag-bar-bottom"></div></div>
+
+  <div id="gtag-keystrokes" class="gtag-hidden" title="Drag to move">
+    <div></div><div class="gtag-key-cap" data-key="W">W</div><div></div>
+    <div class="gtag-key-cap" data-key="A">A</div><div class="gtag-key-cap" data-key="S">S</div><div class="gtag-key-cap" data-key="D">D</div>
+  </div>
+  <div id="gtag-hud-hint" title="Drag to move">[TAB] TERM | [T] CHAT | [B] SFX</div>
+  <div id="gtag-leaderboard" title="Drag to move">
+    <div class="gtag-lb-header"><span>ONLINE MONKES</span><span id="lb-count">1 ONLINE</span></div>
+    <div id="lb-list" class="gtag-lb-list"></div>
+  </div>
+
+  <div id="gtag-hack-blackout" class="gtag-hidden">
+    <div style="font-size:14px; margin-bottom:12px;">⚠ SCREEN DISABLED ⚠</div>
+    <div style="font-size:8px; color:#ff8888;">GORILLA OS DISPLAY OVERRIDDEN BY REMOTE TERMINAL</div>
+  </div>
+  <div id="gtag-hack-indicators" class="gtag-hidden"></div>
+  <div id="gtag-puppet-banner" class="gtag-hidden">
+    <span id="puppet-target-name">PUPPETEERING: PLAYER [ESC TO STOP]</span>
+    <button class="gtag-btn hack-tab-btn" onclick="stopPuppetControl()">STOP</button>
+  </div>
+
+  <div id="gtag-hud-edit-banner" class="gtag-hidden">
+    <span>DRAG ANY HUD MODULE TO REPOSITION</span>
+    <button class="gtag-btn" onclick="toggleHudEditMode(false)">DONE</button>
+  </div>
+  <div id="gtag-vip-flare-banner" class="gtag-hidden">
+    <div id="vip-flare-sender">[★] VIP BROADCAST</div>
+    <div id="vip-flare-msg"></div>
+  </div>
+  <div id="gtag-toast" class="gtag-hidden"><div id="gtag-toast-title">GORILLA OS</div><div id="gtag-toast-body"></div></div>
+
+  <div id="gtag-overlay" class="gtag-hidden">
+    <div class="gtag-terminal">
+      <div class="gtag-header">
+        <span>GORILLA OS v8.0</span>
+        <div style="display:flex; gap:4px; flex-wrap:wrap;">
+          <button id="btn-tab-chat" class="gtag-btn active" onclick="switchTab('chat')">CHAT</button>
+          <button id="btn-tab-sounds" class="gtag-btn" onclick="switchTab('sounds')">SOUNDS</button>
+          <button id="btn-tab-mods" class="gtag-btn" onclick="switchTab('mods')">MODS</button>
+          <button id="btn-tab-vip" class="gtag-btn vip-tab-btn" onclick="switchTab('vip')">[★ VIP]</button>
+          <button id="btn-tab-hack" class="gtag-btn hack-tab-btn" onclick="switchTab('hack')">[HACK]</button>
+          <button id="btn-tab-settings" class="gtag-btn" onclick="switchTab('settings')">SETTINGS</button>
+          <button id="btn-tab-about" class="gtag-btn" onclick="switchTab('about')">ABOUT</button>
+        </div>
+      </div>
+      <div id="tab-chat">
+        <div id="matrix-login-box" class="gtag-panel-box">
+          <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">SIGN IN WITH ELEMENT FOR [★ VIP] MODS &amp; CHAT</div>
+          <div id="matrix-login-error" style="font-size:7px; margin-bottom:10px;"></div>
+          <div class="gtag-input-row" style="margin-bottom:8px;">
+            <span style="font-size:8px;">USER:</span>
+            <input id="matrix-user-input" type="text" placeholder="@user:matrix.org" />
+          </div>
+          <div class="gtag-input-row" style="margin-bottom:10px;">
+            <span style="font-size:8px;">PASS:</span>
+            <input id="matrix-pass-input" type="password" placeholder="••••••••" />
+          </div>
+          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;">
+            <button id="matrix-login-btn" class="gtag-btn">SIGN IN &amp; JOIN</button>
+            <a href="https://element.io" target="_blank" class="gtag-btn" style="text-decoration:none;">CREATE ACCOUNT</a>
+          </div>
+          <div style="border-top:1px solid #1f3d1f; padding-top:10px;">
+            <div class="gtag-input-row" style="margin-bottom:8px;">
+              <span style="font-size:7px; white-space:nowrap;">GUEST NAME:</span>
+              <input id="guest-nick-input" type="text" maxlength="14" placeholder="MONKE_XXXX (SAVED)" style="font-size:9px;" />
+              <button id="matrix-guest-btn" class="gtag-btn" style="white-space:nowrap;">CONTINUE AS GUEST</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="matrix-chat-box" class="gtag-hidden">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:8px; margin-bottom:8px;">
+            <span id="matrix-room-label">STUMP // #GENERAL</span>
+            <button id="matrix-logout-btn" class="gtag-btn" style="font-size:7px;">LOGOUT / SWITCH</button>
+          </div>
+          <div class="gtag-chat-layout">
+            <div class="gtag-room-sidebar">
+              <div class="gtag-sidebar-head"><span>CHANNELS</span><button id="btn-add-room" title="Join Room">+</button></div>
+              <div id="room-sidebar-list"></div>
+            </div>
+            <div class="gtag-chat-main">
+              <div id="chat-messages"></div>
+              <div class="gtag-input-row">
+                <span>&gt;</span>
+                <input id="chat-input" type="text" placeholder="TYPE MESSAGE..." />
+                <button id="chat-send-btn" class="gtag-btn">SEND</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-sounds" class="gtag-hidden">
+        <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">MONKE SOUNDBOARD // ELEMENT VIP SOUNDS PLAY GLOBALLY!</div>
+        <div class="gtag-mod-grid" style="max-height:260px;">
+          <button class="gtag-btn" onclick="playMonkeSound('tag')"> TAG SLAP!</button>
+          <button class="gtag-btn" onclick="playMonkeSound('roundstart')"> ROUND START</button>
+          <button class="gtag-btn" onclick="playMonkeSound('monke')"> OOH-OOH-AAH</button>
+          <button class="gtag-btn" onclick="playMonkeSound('lava')"> LAVA ALERT</button>
+          <button class="gtag-btn" onclick="playMonkeSound('computer')"> STUMP BEEP</button>
+          <button class="gtag-btn" onclick="playMonkeSound('win')"> LAST MONKE</button>
+          <button class="gtag-btn" onclick="playMonkeSound('banshee')"> [★] BANSHEE SCREAM</button>
+          <button class="gtag-btn" onclick="playMonkeSound('airhorn')"> [★] STUMP AIRHORN</button>
+          <button class="gtag-btn" onclick="playMonkeSound('shinyrock')"> [★] SHINY ROCK CHIME</button>
+        </div>
+      </div>
+      <div id="tab-mods" class="gtag-hidden">
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:8px; margin-bottom:8px;">
+          <span>STANDARD MOD MENU</span>
+          <div style="display:flex; gap:6px;">
+            <button class="gtag-btn" style="font-size:7px;" onclick="saveModConfig()">SAVE CONFIG</button>
+            <button class="gtag-btn" style="font-size:7px;" onclick="resetAllMods()">RESET</button>
+          </div>
+        </div>
+        <div class="gtag-slider-box">
+          <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>FOV ZOOM</span><span id="val-fov">1.00x</span></div><input id="slider-fov" type="range" min="0.7" max="1.6" step="0.05" value="1.0" oninput="updateSliderMod('fov', this.value)"></div>
+          <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>CONTRAST</span><span id="val-contrast">100%</span></div><input id="slider-contrast" type="range" min="50" max="200" step="5" value="100" oninput="updateSliderMod('contrast', this.value)"></div>
+          <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>SATURATION</span><span id="val-sat">100%</span></div><input id="slider-sat" type="range" min="0" max="250" step="5" value="100" oninput="updateSliderMod('sat', this.value)"></div>
+          <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>BRIGHTNESS</span><span id="val-bright">100%</span></div><input id="slider-bright" type="range" min="40" max="200" step="5" value="100" oninput="updateSliderMod('bright', this.value)"></div>
+          <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>GAME VOLUME</span><span id="val-gamevol">100%</span></div><input id="slider-gamevol" type="range" min="0" max="100" step="1" value="100" oninput="updateSliderMod('gameVol', this.value)"></div>
+          <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>MENU VOLUME</span><span id="val-menuvol">100%</span></div><input id="slider-menuvol" type="range" min="0" max="100" step="1" value="100" oninput="updateSliderMod('menuVol', this.value)"></div>
+        </div>
+        <div class="gtag-mod-grid">
+          <button id="mod-leaderboard" class="gtag-btn" onclick="toggleMod('leaderboard')">LEADERBOARD: ON</button>
+          <button id="mod-termsfx" class="gtag-btn" onclick="toggleMod('termsfx')">TERMINAL SFX: ON</button>
+          <button id="mod-nightvision" class="gtag-btn" onclick="toggleMod('nightvision')">NIGHT VISION: OFF</button>
+          <button id="mod-lavavision" class="gtag-btn" onclick="toggleMod('lavavision')">LAVA VISION: OFF</button>
+          <button id="mod-blueprint" class="gtag-btn" onclick="toggleMod('blueprint')">BLUEPRINT WIRE: OFF</button>
+          <button id="mod-crt" class="gtag-btn" onclick="toggleMod('crt')">CRT SCANLINES: OFF</button>
+          <button id="mod-crosshair" class="gtag-btn" onclick="toggleMod('crosshair')">CROSSHAIR: OFF</button>
+          <button id="mod-fps" class="gtag-btn" onclick="toggleMod('fps')">FPS COUNTER: OFF</button>
+          <button id="mod-sessionclock" class="gtag-btn" onclick="toggleMod('sessionclock')">SESSION CLOCK: OFF</button>
+          <button id="mod-keystrokes" class="gtag-btn" onclick="toggleMod('keystrokes')">KEYSTROKE HUD: OFF</button>
+          <button id="mod-speedlines" class="gtag-btn" onclick="toggleMod('speedlines')">SPEED LINES: OFF</button>
+          <button id="mod-rainbow" class="gtag-btn" onclick="toggleMod('rainbow')">RGB MONKE: OFF</button>
+          <button id="mod-deepfried" class="gtag-btn" onclick="toggleMod('deepfried')">DEEP FRIED: OFF</button>
+          <button id="mod-invert" class="gtag-btn" onclick="toggleMod('invert')">X-RAY INVERT: OFF</button>
+          <button id="mod-retro" class="gtag-btn" onclick="toggleMod('retro')">GAMEBOY MODE: OFF</button>
+          <button id="mod-vignette" class="gtag-btn" onclick="toggleMod('vignette')">TUNNEL VISION: OFF</button>
+          <button id="mod-cinematic" class="gtag-btn" onclick="toggleMod('cinematic')">CINEMATIC BARS: OFF</button>
+          <button id="mod-mirrorview" class="gtag-btn" onclick="toggleMod('mirrorview')">MIRROR WORLD: OFF</button>
+          <button class="gtag-btn" onclick="clearUnityCosmetics()">UNSTUCK HAT</button>
+        </div>
+      </div>
+
+      <div id="tab-vip" class="gtag-hidden">
+        <div id="vip-locked-view" class="gtag-vip-lock-card">
+          <div style="font-size:10px; color:#ffaa00; margin-bottom:10px;">[★] ELEMENT ACCOUNT REQUIRED</div>
+          <div style="font-size:8px; line-height:1.8; color:#ddd; margin-bottom:14px;">
+            GUEST ACCOUNTS CANNOT ACCESS THE VIP VAULT. SIGN IN WITH A FREE ELEMENT / MATRIX ACCOUNT IN THE CHAT TAB TO UNLOCK 10 EXCLUSIVE MODS, GLOBAL BROADCAST FLARES, AND VIP SOUNDS!
+          </div>
+          <button class="gtag-btn vip-tab-btn" onclick="switchTab('chat')">GO TO ELEMENT SIGN IN</button>
+        </div>
+        <div id="vip-unlocked-view" class="gtag-hidden">
+          <div style="font-size:8px; color:#ffaa00; margin-bottom:8px;">[★] ELEMENT VIP EXCLUSIVE MODS</div>
+          <div class="gtag-input-row" style="margin-bottom:10px;">
+            <span style="color:#ffaa00; font-size:9px;">★&gt;</span>
+            <input id="vip-flare-input" type="text" maxlength="85" placeholder="TYPE TOP-SCREEN VIP FLARE..." />
+            <button class="gtag-btn vip-tab-btn" style="font-size:7px; white-space:nowrap;" onclick="sendVipBroadcastFlare()">SEND VIP FLARE</button>
+          </div>
+          <div class="gtag-mod-grid" style="max-height:225px;">
+            <button id="mod-rgbcrosshair" class="gtag-btn" onclick="toggleMod('rgbcrosshair')">RGB RETICLE: OFF</button>
+            <button id="mod-goldenui" class="gtag-btn" onclick="toggleMod('goldenui')">GOLD TERMINAL: OFF</button>
+            <button id="mod-chatnotify" class="gtag-btn" onclick="toggleMod('chatnotify')">CHAT PING SFX: OFF</button>
+            <button id="mod-vhsglitch" class="gtag-btn" onclick="toggleMod('vhsglitch')">VHS TRACKING: OFF</button>
+            <button id="mod-ultrafov" class="gtag-btn" onclick="toggleMod('ultrafov')">QUAKE PRO FOV: OFF</button>
+            <button id="mod-stumpbeacon" class="gtag-btn" onclick="toggleMod('stumpbeacon')">ONLINE RADAR PING: OFF</button>
+            <button id="mod-rgbhud" class="gtag-btn" onclick="toggleMod('rgbhud')">RAINBOW HUD BORDERS: OFF</button>
+            <button id="mod-vipreticle" class="gtag-btn" onclick="toggleMod('vipreticle')">DIAMOND RETICLE: OFF</button>
+            <button id="mod-autohop" class="gtag-btn" onclick="toggleMod('autohop')">SPACEBAR AUTO-HOP: OFF</button>
+            <button id="mod-matrixrain" class="gtag-btn" onclick="toggleMod('matrixrain')">MATRIX TINT OVERLAY: OFF</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="tab-hack" class="gtag-hidden">
+        <div id="hack-locked-view" class="gtag-panel-box" style="border-color:#ff4444; text-align:center; padding:16px;">
+          <div style="font-size:9px; color:#ff4444; margin-bottom:10px;">⚠ MONKE HACK TERMINAL // CLASSIFIED</div>
+          <div id="hack-code-error" style="font-size:7px; color:#ff4444; margin-bottom:8px;"></div>
+          <div class="gtag-input-row" style="margin-bottom:10px;">
+            <span style="color:#ff4444; font-size:8px;">CODE:</span>
+            <input id="hack-code-input" type="password" placeholder="ENTER SECRET CODE..." />
+            <button class="gtag-btn hack-tab-btn" onclick="unlockHackTerminal()">UNLOCK</button>
+          </div>
+        </div>
+
+        <div id="hack-unlocked-view" class="gtag-hidden">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:8px; color:#ff4444; margin-bottom:8px;">
+            <span id="hack-selected-label">TARGET: ALL</span>
+            <button class="gtag-btn hack-tab-btn" style="font-size:7px;" onclick="triggerRemoteHack('clear')">RESTORE TARGET</button>
+          </div>
+          <div class="gtag-chat-layout">
+            <div class="gtag-room-sidebar" style="border-color:#551a1a;">
+              <div class="gtag-sidebar-head"><span>ONLINE TARGETS</span></div>
+              <div id="hack-target-list" style="display:flex; flex-direction:column; gap:5px; max-height:200px; overflow-y:auto;"></div>
+            </div>
+            <div class="gtag-chat-main">
+              <div class="gtag-mod-grid" style="grid-template-columns:1fr; max-height:220px;">
+                <button id="hack-btn-screen" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('screen')">DISABLE SCREEN</button>
+                <button id="hack-btn-movement" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('movement')">FREEZE MOVEMENT</button>
+                <button id="hack-btn-invert" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('invert')">INVERT CONTROLS</button>
+                <button id="hack-btn-hud" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('hud')">HIJACK HUD MODS</button>
+                <button id="hack-btn-puppet" class="gtag-btn hack-tab-btn" onclick="triggerRemoteHack('puppet')">CONTROL PLAYER</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="tab-settings" class="gtag-hidden">
+        <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">KEYBINDS &amp; HUD MODULE LAYOUT</div>
+        <div class="gtag-panel-box">
+          <div class="gtag-setting-row"><span>TOGGLE TERMINAL</span><button id="bind-btn-toggle" class="gtag-btn" onclick="startRebind('toggle')">[TAB]</button></div>
+          <div class="gtag-setting-row"><span>QUICK OPEN CHAT</span><button id="bind-btn-chat" class="gtag-btn" onclick="startRebind('chat')">[T]</button></div>
+          <div class="gtag-setting-row"><span>QUICK SOUNDBOARD</span><button id="bind-btn-sounds" class="gtag-btn" onclick="startRebind('sounds')">[B]</button></div>
+          <div class="gtag-setting-row">
+            <span>ON-SCREEN HUD MODULES</span>
+            <div style="display:flex; gap:6px;">
+              <button id="btn-edit-hud" class="gtag-btn" onclick="toggleHudEditMode()">MOVE HUD MODULES</button>
+              <button class="gtag-btn" onclick="resetHudPositions()">RESET POS</button>
+            </div>
+          </div>
+        </div>
+        <button class="gtag-btn" style="font-size:7px;" onclick="resetKeybinds()">RESET DEFAULT KEYBINDS</button>
+      </div>
+
+      <div id="tab-about" class="gtag-hidden">
+        <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">SYSTEM INFORMATION // GORILLA OS</div>
+        <div class="gtag-panel-box">
+          <div class="gtag-about-line"><span class="gtag-about-highlight">OS VERSION:</span> GORILLA OS v8.0 (WEB EDITION)</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">ACCOUNT STATUS:</span> <span id="about-account-status">GUEST</span></div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">TELEMETRY RELAY:</span> GLOBAL VIP SFX, PUPPET HACKS &amp; OFFLINE BEACON</div>
+          <div style="font-size:8px; color:#ffaa00; margin-top:8px;">CHANGELOG</div>
+          <div class="gtag-changelog-box">
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v8.0]</span> ADDED REMOTE PLAYER PUPPET CONTROL TO [HACK] TERMINAL &amp; FIXED HELD-KEY RELEASE ON MOVEMENT FREEZE.</div>
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.9]</span> ADDED SECRET-CODE PROTECTED [HACK] TERMINAL WITH TARGET SELECTOR &amp; ON-SCREEN BREACH INDICATORS.</div>
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.8]</span> MADE SOUNDBOARD EFFECTS GLOBAL FOR ELEMENT VIP USERS VIA #STUMP-NETWORK-RANDOM.</div>
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.7]</span> STOPPED IDLE RELAY CONNECTIONS ON LOGIN SCREEN, ADDED SAVED GUEST DISPLAY NAMES &amp; 10-MIN INACTIVITY TIMEOUT.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="soundboard.js?v=8"></script>
+  <script src="ui-keybinds.js?v=8"></script>
+  <script src="chat.js?v=8"></script>
+  <script>
+    (async function bootGorillaTagUnity() {
+      const statusEl = document.getElementById("gtag-load-status");
+      const barEl = document.getElementById("gtag-bar-inner");
+      const loadingScreen = document.getElementById("gtag-loading");
+      const canvas = document.getElementById("unity-canvas");
+
+      function setProgress(pct, label) {
+        if (barEl) barEl.style.width = `${Math.min(100, Math.max(0, pct))}%`;
+        if (statusEl && label) statusEl.textContent = label;
+      }
+
+      if (window.location.protocol === "file:") {
+        setProgress(100, "ERROR: OPEN VIA GITHUB PAGES (HTTPS), NOT FILE://");
+        if (statusEl) statusEl.style.color = "#ff4444";
+        return;
+      }
+
+      try {
+        const chunks = [];
+        for (let i = 1; i <= 8; i++) {
+          setProgress(((i - 1) / 8) * 60 + 3, `DOWNLOADING GAME DATA (${i}/8)...`);
+          const ctrl = new AbortController();
+          const timer = setTimeout(() => ctrl.abort(), 25000);
+          const res = await fetch(`Build/gtagwebR2.data.unityweb.part${i}?v=8`, { signal: ctrl.signal });
+          clearTimeout(timer);
+          if (!res.ok) throw new Error(`Part ${i} HTTP ${res.status}`);
+          chunks.push(await res.arrayBuffer());
+        }
+
+        const mergedDataUrl = URL.createObjectURL(new Blob(chunks, { type: "application/octet-stream" }));
+        setProgress(65, "INITIALIZING UNITY LOADER...");
+
+        await new Promise((resolve, reject) => {
+          const s = document.createElement("script");
+          s.src = "Build/gtagwebR2.loader.js?v=8";
+          s.onload = resolve;
+          s.onerror = () => reject(new Error("Failed to load Build/gtagwebR2.loader.js"));
+          document.body.appendChild(s);
+        });
+
+        await createUnityInstance(canvas, {
+          dataUrl: mergedDataUrl,
+          frameworkUrl: "Build/gtagwebR2.framework.js.unityweb",
+          codeUrl: "Build/gtagwebR2.wasm.unityweb",
+          streamingAssetsUrl: "StreamingAssets",
+          companyName: "Another Axiom",
+          productName: "Gorilla Tag Web",
+          productVersion: "1.0"
+        }, p => setProgress(65 + Math.round(p * 35), `BOOTING MONKE ENGINE... ${65 + Math.round(p * 35)}%`));
+
+        URL.revokeObjectURL(mergedDataUrl);
+        loadingScreen?.classList.add("gtag-hidden");
+      } catch (err) {
+        console.error(err);
+        const msg = err?.name === "AbortError" ? "NETWORK TIMEOUT ON DATA CHUNK — REFRESH TO RETRY" : (err?.message || String(err));
+        setProgress(100, `BOOT ERROR: ${msg}`);
+        if (statusEl) statusEl.style.color = "#ff4444";
+      }
+    })();
+  </script>
+</body>
+</html>
