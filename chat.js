@@ -18,11 +18,32 @@ document.addEventListener("DOMContentLoaded", () => {
   let syncToken = "";
   let isSyncing = false;
   let cachedRoomList = [];
+  let toastTimeout = null;
 
   function setStatus(msg, isError = false) {
     if (!statusLabel) return;
     statusLabel.style.color = isError ? "#ff4444" : "#33ff33";
     statusLabel.textContent = msg;
+  }
+
+  function showGtagNotification(title, bodyText) {
+    const toast = document.getElementById("gtag-toast");
+    const toastTitle = document.getElementById("gtag-toast-title");
+    const toastBody = document.getElementById("gtag-toast-body");
+    if (!toast || !toastTitle || !toastBody) return;
+
+    toastTitle.textContent = title;
+    toastBody.textContent = bodyText;
+    toast.classList.remove("gtag-hidden");
+
+    if (typeof playMonkeSound === "function") {
+      playMonkeSound("computer");
+    }
+
+    clearTimeout(toastTimeout);
+    toastTimeout = setTimeout(() => {
+      toast.classList.add("gtag-hidden");
+    }, 4500);
   }
 
   function addChatLine(sender, text) {
@@ -235,6 +256,7 @@ document.addEventListener("DOMContentLoaded", () => {
         }
 
         const data = await res.json();
+        const isInitialSync = !syncToken;
         if (data.next_batch) syncToken = data.next_batch;
 
         const joinedRooms = data.rooms?.join || {};
@@ -245,6 +267,12 @@ document.addEventListener("DOMContentLoaded", () => {
           if (ev.type === "m.room.message" && ev.content?.body) {
             const displayUser = ev.sender.split(":").at(0).replace(/^@/, "");
             addChatLine(displayUser, ev.content.body);
+
+            const overlay = document.getElementById("gtag-overlay");
+            const terminalClosed = overlay && overlay.classList.contains("gtag-hidden");
+            if (!isInitialSync && terminalClosed && ev.sender !== userId) {
+              showGtagNotification("STUMP CHAT // [T] TO REPLY", `[${displayUser}]: ${ev.content.body}`);
+            }
           }
         }
       } catch (_) {
