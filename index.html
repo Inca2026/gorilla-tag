@@ -46,7 +46,7 @@
   <div id="gtag-overlay" class="gtag-hidden">
     <div class="gtag-terminal">
       <div class="gtag-header">
-        <span>GORILLA OS v7.5</span>
+        <span>GORILLA OS v7.6</span>
         <div style="display:flex; gap:4px; flex-wrap:wrap;">
           <button id="btn-tab-chat" class="gtag-btn active" onclick="switchTab('chat')">CHAT</button>
           <button id="btn-tab-sounds" class="gtag-btn" onclick="switchTab('sounds')">SOUNDS</button>
@@ -162,7 +162,7 @@
           <div style="font-size:8px; color:#ffaa00; margin-bottom:8px;">[★] ELEMENT VIP EXCLUSIVE MODS</div>
           <div class="gtag-input-row" style="margin-bottom:10px;">
             <span style="color:#ffaa00; font-size:9px;">★&gt;</span>
-            <input id="vip-flare-input" type="text" maxlength="85" placeholder="TYPE TOP-SCREEN VIP FLARE..." style="border-bottom-color:#ffaa00; color:#ffdd44; font-size:9px;" />
+            <input id="vip-flare-input" type="text" maxlength="85" placeholder="TYPE TOP-SCREEN VIP FLARE..." />
             <button class="gtag-btn vip-tab-btn" style="font-size:7px; white-space:nowrap;" onclick="sendVipBroadcastFlare()">SEND VIP FLARE</button>
           </div>
           <div class="gtag-mod-grid" style="max-height:225px;">
@@ -199,11 +199,15 @@
       <div id="tab-about" class="gtag-hidden">
         <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">SYSTEM INFORMATION // GORILLA OS</div>
         <div class="gtag-panel-box">
-          <div class="gtag-about-line"><span class="gtag-about-highlight">OS VERSION:</span> GORILLA OS v7.5 (WEB EDITION)</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">OS VERSION:</span> GORILLA OS v7.6 (WEB EDITION)</div>
           <div class="gtag-about-line"><span class="gtag-about-highlight">ACCOUNT STATUS:</span> <span id="about-account-status">GUEST</span></div>
-          <div class="gtag-about-line"><span class="gtag-about-highlight">TELEMETRY RELAY:</span> SILENT PRESENCE &amp; VIP FLARE ACTIVE</div>
-          <div class="gtag-about-line"><span class="gtag-about-highlight">GUEST MODE:</span> CHAT IN #GENERAL &amp; APPEAR ON LEADERBOARD WITHOUT AN ACCOUNT.</div>
-          <div class="gtag-about-line"><span class="gtag-about-highlight">ELEMENT VIP:</span> UNLOCKS THE [★ VIP] TAB, 10 PREMIUM MODS &amp; TOP-CENTER BROADCAST FLARES.</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">TELEMETRY RELAY:</span> INSTANT OFFLINE BEACON &amp; VIP FLARE</div>
+          <div style="font-size:8px; color:#ffaa00; margin-top:8px;">CHANGELOG</div>
+          <div class="gtag-changelog-box">
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.6]</span> FIXED GHOST LEADERBOARD ENTRIES ON LOAD, ADDED INSTANT TAB-CLOSE OFFLINE BEACON, INLINE VIP FLARE INPUT &amp; ABOUT CHANGELOG.</div>
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.5]</span> ADDED [★ VIP] VAULT TAB, TOP-CENTER VIP BROADCAST FLARES &amp; SILENT BACKEND GUEST RELAY (MONKE_XXXX).</div>
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.0]</span> ADDED 24 CLIENT MODS, SEPARATE GAME/MENU VOLUME SLIDERS, CUSTOM KEYBINDS &amp; DRAGGABLE HUD MODULES.</div>
+          </div>
         </div>
       </div>
     </div>
