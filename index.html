@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <title>Gorilla Tag Web</title>
   <link href="https://googleapis.com" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=65">
+  <link rel="stylesheet" href="style.css?v=70">
 </head>
 <body>
 
@@ -28,19 +28,32 @@
   </div>
 
   <!-- On-Screen Keybind Reminder -->
-  <div id="gtag-hud-hint">[TAB] TERMINAL | [T] CHAT | [B] SOUNDBOARD</div>
+  <div id="gtag-hud-hint">[TAB] TERMINAL | [T] CHAT | [B] SOUNDS | [R] SPAWN SYNC</div>
 
-  <!-- Gorilla OS Notification Toast -->
+  <!-- Gorilla OS Notification Toast (Bottom-Right so it never overlaps Radar) -->
   <div id="gtag-toast" class="gtag-hidden">
     <div id="gtag-toast-title">NEW MESSAGE // [T] TO REPLY</div>
     <div id="gtag-toast-body"></div>
+  </div>
+
+  <!-- Gorilla OS Live Hide & Seek Radar (Top-Right) -->
+  <div id="gtag-radar" class="gtag-hidden">
+    <div class="gtag-radar-header">
+      <span>MONKE RADAR</span>
+      <span id="radar-count">1 ONLINE</span>
+    </div>
+    <canvas id="radar-canvas" width="164" height="164"></canvas>
+    <div class="gtag-radar-footer">
+      <span id="radar-coords">X:0 Z:0</span>
+      <button type="button" onclick="resetRadarSpawn()">[R] STUMP</button>
+    </div>
   </div>
 
   <!-- Custom Gorilla Tag Stump Computer Overlay -->
   <div id="gtag-overlay" class="gtag-hidden">
     <div class="gtag-terminal">
       <div class="gtag-header">
-        <span>GORILLA OS v3.0 // [TAB] CLOSE</span>
+        <span>GORILLA OS v3.2 // [TAB] CLOSE</span>
         <div>
           <button id="btn-tab-chat" class="gtag-btn active" type="button" onclick="switchTab('chat')">CHAT</button>
           <button id="btn-tab-sounds" class="gtag-btn" type="button" onclick="switchTab('sounds')">SOUNDS</button>
@@ -107,7 +120,7 @@
       <!-- Visual & HUD Mods Tab -->
       <div id="tab-mods" class="gtag-hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-          <span style="font-size:8px; color:#888;">GORILLA OS MOD MENU v3.0</span>
+          <span style="font-size:8px; color:#888;">GORILLA OS MOD MENU v3.2</span>
           <div style="display:flex; gap:6px;">
             <button id="btn-save-mods" class="gtag-btn" type="button" style="font-size:7px; padding:4px 6px;" onclick="saveModConfig()">SAVE CONFIG</button>
             <button id="btn-reset-mods" class="gtag-btn" type="button" style="font-size:7px; padding:4px 6px;" onclick="resetAllMods()">RESET</button>
@@ -132,6 +145,7 @@
 
         <!-- Toggleable Mods Grid -->
         <div class="gtag-mod-grid">
+          <button id="mod-radar" class="gtag-btn" type="button" onclick="toggleMod('radar')">HIDE/SEEK RADAR: OFF</button>
           <button id="mod-nightvision" class="gtag-btn" type="button" onclick="toggleMod('nightvision')">NIGHT VISION: OFF</button>
           <button id="mod-crt" class="gtag-btn" type="button" onclick="toggleMod('crt')">CRT SCANLINES: OFF</button>
           <button id="mod-crosshair" class="gtag-btn" type="button" onclick="toggleMod('crosshair')">CROSSHAIR: OFF</button>
@@ -142,7 +156,7 @@
           <button id="mod-retro" class="gtag-btn" type="button" onclick="toggleMod('retro')">GAMEBOY MODE: OFF</button>
           <button id="mod-vignette" class="gtag-btn" type="button" onclick="toggleMod('vignette')">TUNNEL VISION: OFF</button>
           <button id="mod-cinematic" class="gtag-btn" type="button" onclick="toggleMod('cinematic')">CINEMATIC BARS: OFF</button>
-          <button class="gtag-btn" type="button" style="grid-column: span 2; color:#ffaa00; border-color:#ffaa00;" onclick="clearUnityCosmetics()">UNSTUCK HAT (WIPE COSMETICS)</button>
+          <button class="gtag-btn" type="button" style="color:#ffaa00; border-color:#ffaa00;" onclick="clearUnityCosmetics()">UNSTUCK HAT</button>
         </div>
       </div>
 
@@ -150,9 +164,9 @@
   </div>
 
   <!-- Separate Modular Scripts -->
-  <script src="ui-keybinds.js?v=65"></script>
-  <script src="soundboard.js?v=65"></script>
-  <script src="chat.js?v=65"></script>
+  <script src="ui-keybinds.js?v=70"></script>
+  <script src="soundboard.js?v=70"></script>
+  <script src="chat.js?v=70"></script>
 
   <!-- Unity 8-Part Loader -->
   <script>
