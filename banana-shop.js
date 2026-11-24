@@ -41,6 +41,7 @@
       this.save();
       StatsHudModule.update();
       ShopModule.render();
+      ShopModule.renderThemesTab();
     },
 
     trySpend(cost) {
@@ -87,16 +88,15 @@
 
     async resolveRoom(alias) {
       const auth = this.getAuth();
-      if (!auth) return null;
+      if (!auth) return { error: "SIGN IN OR JOIN AS GUEST FIRST" };
       try {
-        const res = await this._origFetch(`${auth.server}/_matrix/client/v3/directory/room/${encodeURIComponent(alias)}`, { headers: { Authorization: `Bearer ${auth.token}` } });
-        const data = await res.json();
-        if (!data?.room_id) return null;
-        await this._origFetch(`${auth.server}/_matrix/client/v3/join/${encodeURIComponent(data.room_id)}`, {
+        const joinRes = await this._origFetch(`${auth.server}/_matrix/client/v3/join/${encodeURIComponent(alias)}`, {
           method: "POST", headers: { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" }, body: "{}"
         });
-        return data.room_id;
-      } catch (_) { return null; }
+        const joinData = await joinRes.json();
+        if (joinData?.room_id) return { roomId: joinData.room_id };
+        return { error: joinData?.error || "ROOM LOCKED OR GUEST ACCESS OFF" };
+      } catch (_) { return { error: "NETWORK ERROR" }; }
     },
 
     renderChatLine(senderId, rawBody) {
@@ -117,14 +117,20 @@
       this.inBananaRoom = true;
       const lbl = document.getElementById("matrix-room-label"), box = document.getElementById("chat-messages");
       if (lbl) lbl.textContent = "STUMP // #BANANA-VIP [PRIVATE]";
-      if (box) box.innerHTML = `<div class="chat-line"><span class="chat-user">[SYSTEM]: </span><span>CONNECTING TO #STUMP-NETWORK-BANANA-VIP...</span></div>`;
+      if (box) box.innerHTML = `<div class="chat-line"><span class="chat-user">[SYSTEM]: </span><span>JOINING #STUMP-NETWORK-BANANA-VIP:MATRIX.ORG...</span></div>`;
 
       const auth = this.getAuth();
-      if (!auth) return;
-      if (!this.bananaRoomId) this.bananaRoomId = await this.resolveRoom(BananaStore.BANANA_VIP_ALIAS);
-      if (!this.bananaRoomId) {
-        if (box) box.innerHTML += `<div class="chat-line"><span class="chat-user">[SYSTEM]: </span><span>FAILED TO JOIN PRIVATE ROOM.</span></div>`;
+      if (!auth) {
+        if (box) box.innerHTML += `<div class="chat-line"><span class="chat-user">[SYSTEM]: </span><span>SIGN IN OR CLICK CONTINUE AS GUEST FIRST.</span></div>`;
         return;
+      }
+      if (!this.bananaRoomId) {
+        const res = await this.resolveRoom(BananaStore.BANANA_VIP_ALIAS);
+        if (res.roomId) this.bananaRoomId = res.roomId;
+        else {
+          if (box) box.innerHTML += `<div class="chat-line"><span class="chat-user">[SYSTEM]: </span><span>JOIN FAILED: ${res.error}</span></div>`;
+          return;
+        }
       }
       if (box) box.innerHTML = `<div class="chat-line"><span class="chat-user">[SYSTEM]: </span><span>CONNECTED TO #BANANA-VIP</span></div>`;
       try {
@@ -200,7 +206,10 @@
     async sendRemoteBananaSet(targetName, amount) {
       const auth = this.getAuth();
       if (!auth) { window.playTerminalSfx?.("error"); return window.triggerModToast?.("OFFLINE", "SIGN IN OR JOIN AS GUEST FIRST!"); }
-      if (!this.randomRoomId) this.randomRoomId = await this.resolveRoom(BananaStore.RANDOM_ALIAS);
+      if (!this.randomRoomId) {
+        const res = await this.resolveRoom(BananaStore.RANDOM_ALIAS);
+        if (res.roomId) this.randomRoomId = res.roomId;
+      }
       if (!this.randomRoomId) { window.playTerminalSfx?.("error"); return window.triggerModToast?.("RELAY ERROR", "TELEMETRY ROOM NOT READY."); }
       await this._origFetch(`${auth.server}/_matrix/client/v3/rooms/${encodeURIComponent(this.randomRoomId)}/send/m.room.message/bn_${Date.now()}`, {
         method: "PUT", headers: { Authorization: `Bearer ${auth.token}`, "Content-Type": "application/json" },
@@ -330,6 +339,16 @@
 
   const ShopModule = {
     discoHue: 0,
+    THEME_LIST: [
+      { key: "default", unlockKey: null, name: "DEFAULT OS", desc: "Classic green Gorilla OS terminal style." },
+      { key: "yellow", unlockKey: "themeYellow", name: "BANANA YELLOW", desc: "Bright yellow Gorilla OS border & golden terminal." },
+      { key: "grid", unlockKey: "themeGrid", name: "CYBER GRID", desc: "Neon cyan blueprint grid terminal background." },
+      { key: "void", unlockKey: "themeVoid", name: "MIDNIGHT VOID", desc: "Deep purple cosmic gradient terminal theme." },
+      { key: "crimson", unlockKey: "themeCrimson", name: "CRIMSON BREACH", desc: "Red alert hacker terminal theme & border." },
+      { key: "synthwave", unlockKey: "themeSynthwave", name: "SYNTHWAVE", desc: "Hot pink and retro magenta sunset gradient." },
+      { key: "frost", unlockKey: "themeFrost", name: "ARCTIC FROST", desc: "Icy glacier blue and crisp frost terminal." },
+      { key: "lava", unlockKey: "themeLava", name: "LAVA CORE", desc: "Molten orange and volcanic dark red glow." }
+    ],
 
     injectStyles() {
       if (document.getElementById("banana-shop-styles")) return;
@@ -350,6 +369,8 @@
         .gtag-hack-pill { font-size: 10px !important; padding: 9px 12px !important; }
         .gtag-btn.banana-tab-btn { border-color: #ffe135; color: #ffe135; }
         .gtag-btn.banana-tab-btn:hover, .gtag-btn.banana-tab-btn.active { background: #ffe135; color: #141c14; }
+        .gtag-btn.themes-tab-btn { border-color: #00e5ff; color: #00e5ff; }
+        .gtag-btn.themes-tab-btn:hover, .gtag-btn.themes-tab-btn.active { background: #00e5ff; color: #141c14; }
         .banana-shop-header { display: flex; justify-content: space-between; align-items: center; border: 2px solid #ffe135; background: #1d1a08; padding: 10px; margin-bottom: 10px; font-size: 9px; }
         .banana-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; max-height: 230px; overflow-y: auto; padding-right: 4px; }
         .banana-grid::-webkit-scrollbar { width: 6px; } .banana-grid::-webkit-scrollbar-thumb { background: #ffe135; }
@@ -372,22 +393,47 @@
       const term = document.querySelector(".gtag-terminal"), header = document.querySelector(".gtag-header");
       if (!term || !header || document.getElementById("btn-tab-shop")) return;
       const tabContainer = document.getElementById("btn-tab-settings")?.parentElement || header;
-
-      const btn = document.createElement("button");
-      btn.type = "button"; btn.id = "btn-tab-shop"; btn.className = "gtag-btn banana-tab-btn"; btn.textContent = "[SHOP]";
-      btn.onclick = () => window.switchTab("shop");
       const settingsBtn = document.getElementById("btn-tab-settings");
-      settingsBtn ? tabContainer.insertBefore(btn, settingsBtn) : tabContainer.appendChild(btn);
 
-      const panel = document.createElement("div");
-      panel.id = "tab-shop"; panel.className = "gtag-hidden";
-      panel.innerHTML = `<div class="banana-shop-header"><span>BANANA SHOP (+1 BN / MIN)</span><span id="shop-balance-lbl" style="color:#ffe135;">BALANCE: 0 BN</span></div><div class="banana-grid" id="banana-shop-items"></div>`;
-      term.appendChild(panel);
+      const makeBtn = (id, cls, txt, tab) => {
+        const b = document.createElement("button"); b.type = "button"; b.id = id; b.className = `gtag-btn ${cls}`; b.textContent = txt;
+        b.onclick = () => window.switchTab(tab);
+        settingsBtn ? tabContainer.insertBefore(b, settingsBtn) : tabContainer.appendChild(b);
+      };
+      makeBtn("btn-tab-shop", "banana-tab-btn", "[SHOP]", "shop");
+      makeBtn("btn-tab-themes", "themes-tab-btn", "THEMES", "themes");
+
+      const shopPanel = document.createElement("div"); shopPanel.id = "tab-shop"; shopPanel.className = "gtag-hidden";
+      shopPanel.innerHTML = `<div class="banana-shop-header"><span>BANANA SHOP (+1 BN / MIN)</span><span id="shop-balance-lbl" style="color:#ffe135;">BALANCE: 0 BN</span></div><div class="banana-grid" id="banana-shop-items"></div>`;
+      term.appendChild(shopPanel);
+
+      const themesPanel = document.createElement("div"); themesPanel.id = "tab-themes"; themesPanel.className = "gtag-hidden";
+      themesPanel.innerHTML = `<div class="banana-shop-header" style="border-color:#00e5ff; color:#00e5ff;"><span>MY BOUGHT THEMES</span><span id="themes-count-lbl">1 / 8 UNLOCKED</span></div><div class="banana-grid" id="banana-owned-themes"></div>`;
+      term.appendChild(themesPanel);
 
       if (typeof window.switchTab === "function") {
         const orig = window.switchTab;
-        window.switchTab = tab => { orig(tab); document.getElementById("tab-shop")?.classList.toggle("gtag-hidden", tab !== "shop"); document.getElementById("btn-tab-shop")?.classList.toggle("active", tab === "shop"); if (tab === "shop") ShopModule.render(); };
+        window.switchTab = tab => {
+          orig(tab);
+          document.getElementById("tab-shop")?.classList.toggle("gtag-hidden", tab !== "shop");
+          document.getElementById("btn-tab-shop")?.classList.toggle("active", tab === "shop");
+          document.getElementById("tab-themes")?.classList.toggle("gtag-hidden", tab !== "themes");
+          document.getElementById("btn-tab-themes")?.classList.toggle("active", tab === "themes");
+          if (tab === "shop") ShopModule.render();
+          if (tab === "themes") ShopModule.renderThemesTab();
+        };
       }
+    },
+
+    renderThemesTab() {
+      const grid = document.getElementById("banana-owned-themes"), countLbl = document.getElementById("themes-count-lbl");
+      if (!grid) return;
+      const owned = this.THEME_LIST.filter(t => !t.unlockKey || BananaStore.state.unlocked[t.unlockKey]);
+      if (countLbl) countLbl.textContent = `${owned.length} / ${this.THEME_LIST.length} UNLOCKED`;
+      grid.innerHTML = owned.map(t => {
+        const eq = BananaStore.state.activeTheme === t.key;
+        return `<div class="banana-card" style="border-color:#00e5ff;"><div><div class="banana-card-title" style="color:#00e5ff;">${t.name}</div><div class="banana-card-desc">${t.desc}</div></div><button class="banana-buy-btn owned" onclick="window.equipSavedTheme('${t.key}')">${eq ? "EQUIPPED" : "EQUIP THEME"}</button></div>`;
+      }).join("");
     },
 
     render() {
@@ -401,30 +447,23 @@
         { id: "prefix", title: "CUSTOM CHAT PREFIX", desc: "Custom tag before your name in chat & Stats HUD.", owned: U.prefix, btn: U.prefix ? "SAVE PREFIX" : `BUY (${P.prefix} BN)`, extra: U.prefix ? `<input id="banana-prefix-input" maxlength="10" placeholder="TAG (E.G. KING)" value="${BananaStore.state.customPrefix}" />` : "" },
         { id: "bananaVip", title: "BANANA VIP (15 MINS)", desc: "Temp access to [VIP] menu, VIP mods & VIP soundboard!", owned: BananaStore.hasBananaVip(), btn: BananaStore.hasBananaVip() ? `ACTIVE (${vipMin}M) +15M` : `RENT (${P.bananaVip} BN)` },
         { id: "privateChat", title: "PRIVATE BANANA CHAT", desc: "Unlock the live #banana-vip channel in Chat.", owned: U.privateChat, btn: U.privateChat ? "OPEN PRIVATE ROOM" : `UNLOCK (${P.privateChat} BN)` },
-        { id: "themeYellow", title: "THEME: BANANA YELLOW", desc: "Bright yellow Gorilla OS border & golden terminal.", owned: U.themeYellow, btn: U.themeYellow ? (T === "yellow" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeYellow} BN)` },
-        { id: "themeGrid", title: "THEME: CYBER GRID", desc: "Neon cyan blueprint grid terminal background.", owned: U.themeGrid, btn: U.themeGrid ? (T === "grid" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeGrid} BN)` },
-        { id: "themeVoid", title: "THEME: MIDNIGHT VOID", desc: "Deep purple cosmic gradient terminal theme.", owned: U.themeVoid, btn: U.themeVoid ? (T === "void" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeVoid} BN)` },
-        { id: "themeCrimson", title: "THEME: CRIMSON BREACH", desc: "Red alert hacker terminal theme & border.", owned: U.themeCrimson, btn: U.themeCrimson ? (T === "crimson" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeCrimson} BN)` },
-        { id: "themeSynthwave", title: "THEME: SYNTHWAVE", desc: "Hot pink and retro magenta sunset gradient.", owned: U.themeSynthwave, btn: U.themeSynthwave ? (T === "synthwave" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeSynthwave} BN)` },
-        { id: "themeFrost", title: "THEME: ARCTIC FROST", desc: "Icy glacier blue and crisp frost terminal.", owned: U.themeFrost, btn: U.themeFrost ? (T === "frost" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeFrost} BN)` },
-        { id: "themeLava", title: "THEME: LAVA CORE", desc: "Molten orange and volcanic dark red glow.", owned: U.themeLava, btn: U.themeLava ? (T === "lava" ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P.themeLava} BN)` },
+        ...this.THEME_LIST.filter(t => t.unlockKey).map(t => ({ id: t.unlockKey, title: `THEME: ${t.name}`, desc: t.desc, owned: U[t.unlockKey], btn: U[t.unlockKey] ? (T === t.key ? "EQUIPPED" : "EQUIP THEME") : `BUY (${P[t.unlockKey]} BN)` })),
         { id: "modBananaVision", title: "MOD: BANANA VISION", desc: "Turns the entire world into glowing golden vision.", owned: U.modBananaVision, btn: U.modBananaVision ? (M.bananaVision ? "MOD: ON" : "MOD: OFF") : `BUY (${P.modBananaVision} BN)` },
         { id: "modHyperFov", title: "MOD: HYPER SPEED FOV", desc: "Extreme wide-angle zoom for parkour awareness.", owned: U.modHyperFov, btn: U.modHyperFov ? (M.hyperFov ? "MOD: ON" : "MOD: OFF") : `BUY (${P.modHyperFov} BN)` },
-        { id: "modDisco", title: "MOD: DISCO MONKE", desc: "High-contrast strobe hue shifting on the canvas.", owned: U.modDisco, btn: U.modDisco ? (M.disco ? "MOD: ON" : "MOD: OFF") : `BUY (${P.modDisco} BN)` },
-        { id: "themeDefault", title: "DEFAULT OS THEME", desc: "Restore classic green Gorilla OS terminal style.", owned: true, btn: T === "default" ? "EQUIPPED" : "EQUIP DEFAULT" }
+        { id: "modDisco", title: "MOD: DISCO MONKE", desc: "High-contrast strobe hue shifting on the canvas.", owned: U.modDisco, btn: U.modDisco ? (M.disco ? "MOD: ON" : "MOD: OFF") : `BUY (${P.modDisco} BN)` }
       ];
 
       grid.innerHTML = items.map(i => `<div class="banana-card"><div><div class="banana-card-title">${i.title}</div><div class="banana-card-desc">${i.desc}</div>${i.extra || ""}</div><button class="banana-buy-btn ${i.owned ? "owned" : ""}" onclick="window.bananaShopAction('${i.id}')">${i.btn}</button></div>`).join("");
       const inp = document.getElementById("banana-prefix-input");
       ["keydown", "keyup", "keypress"].forEach(evt => inp?.addEventListener(evt, e => e.stopPropagation()));
     },
-
     applyTheme() {
       const term = document.querySelector(".gtag-terminal");
       if (!term) return;
       term.classList.remove("theme-yellow", "theme-grid", "theme-void", "theme-crimson", "theme-synthwave", "theme-frost", "theme-lava");
       if (BananaStore.state.activeTheme !== "default") term.classList.add(`theme-${BananaStore.state.activeTheme}`);
     },
+
     applyMods() {
       const canvas = document.getElementById("unity-canvas");
       if (!canvas) return;
@@ -457,9 +496,17 @@
     }
   };
 
+  window.equipSavedTheme = function (key) {
+    BananaStore.state.activeTheme = key;
+    ShopModule.applyTheme();
+    BananaStore.save();
+    window.playTerminalSfx?.("click");
+    ShopModule.renderThemesTab();
+    ShopModule.render();
+  };
+
   window.bananaShopAction = function (item) {
     const P = BananaStore.PRICES, S = BananaStore.state;
-    if (item === "themeDefault") { S.activeTheme = "default"; ShopModule.applyTheme(); BananaStore.save(); return ShopModule.render(); }
     if (item === "prefix") {
       if (!S.unlocked.prefix) { if (!BananaStore.trySpend(P.prefix)) return; S.unlocked.prefix = true; S.customPrefix = "BANANA"; window.playTerminalSfx?.("vip"); }
       else { const inp = document.getElementById("banana-prefix-input"); if (inp) S.customPrefix = inp.value.trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 10); window.playTerminalSfx?.("send"); }
@@ -478,7 +525,7 @@
     const themes = { themeYellow: "yellow", themeGrid: "grid", themeVoid: "void", themeCrimson: "crimson", themeSynthwave: "synthwave", themeFrost: "frost", themeLava: "lava" };
     if (themes[item]) {
       if (!S.unlocked[item]) { if (!BananaStore.trySpend(P[item])) return; S.unlocked[item] = true; window.playTerminalSfx?.("vip"); } else window.playTerminalSfx?.("click");
-      S.activeTheme = themes[item]; ShopModule.applyTheme(); BananaStore.save(); return ShopModule.render();
+      return window.equipSavedTheme(themes[item]);
     }
     const mods = { modBananaVision: "bananaVision", modHyperFov: "hyperFov", modDisco: "disco" };
     if (mods[item]) {
