@@ -84,17 +84,34 @@ body, html {
 .chat-line { margin-bottom: 6px; }
 .chat-user { color: #ffaa00; }
 
-/* Shared Input Row Styling (Chat + Music Link) */
+/* Shared Input Row Styling (Chat + Element Login) */
 .gtag-input-row { display: flex; align-items: center; gap: 8px; }
-#chat-input, #music-link-input {
+#chat-input, #matrix-user-input, #matrix-pass-input {
   width: 100%; background: transparent;
   border: none; border-bottom: 2px solid #33ff33;
   color: #33ff33; font-family: 'Press Start 2P', monospace;
   font-size: 10px; outline: none; padding: 6px 2px;
 }
-#chat-input::placeholder, #music-link-input::placeholder {
+#chat-input::placeholder, #matrix-user-input::placeholder, #matrix-pass-input::placeholder {
   color: #1f661f;
 }
 
-/* Music Panel */
-#tab-music { text-align: center; padding: 6px 0; }
+/* Client Visual Mods (CRT Scanlines & Center Crosshair) */
+#crt-overlay {
+  position: fixed; inset: 0; pointer-events: none; z-index: 90;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.22),
+    rgba(0, 0, 0, 0.22) 2px,
+    transparent 2px,
+    transparent 4px
+  );
+}
+
+#gtag-crosshair {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  color: #33ff33; font-size: 16px;
+  pointer-events: none; z-index: 95;
+  text-shadow: 0 0 4px #000;
+}
