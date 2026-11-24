@@ -4,7 +4,7 @@ document.addEventListener("DOMContentLoaded", () => {
   const FALLBACK_SERVER = "https://matrix.org";
   const GUEST_BOT_USER = "@meebo:matrix.org";
   const GUEST_BOT_PASS = "ColdLeg6932";
-  const GUEST_IDLE_LIMIT_MS = 10 * 60 * 1000; // 10-minute guest inactivity timeout
+  const GUEST_IDLE_LIMIT_MS = 10 * 60 * 1000;
 
   const loginBox = document.getElementById("matrix-login-box");
   const chatBox = document.getElementById("matrix-chat-box");
@@ -24,7 +24,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let backendRandomRoomId = "";
   let activeChannelKey = "general";
 
-  // Persistent custom guest display name saved in localStorage
   let savedGuestNick = localStorage.getItem("gtag_saved_guest_nick") || "";
   if (guestNickField && savedGuestNick) guestNickField.value = savedGuestNick;
 
@@ -153,7 +152,6 @@ document.addEventListener("DOMContentLoaded", () => {
     return { displayUser: formatDisplayName(senderId), cleanText: rawBody, isVip: senderId !== guestBotId };
   }
 
-  // Only connects @meebo when user explicitly clicks "CONTINUE AS GUEST"
   async function startGuestSession() {
     if (accessToken) return;
     const typedNick = guestNickField?.value || savedGuestNick;
@@ -200,7 +198,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
   async function sendSilentPresence() {
-    if (!accessToken && !isGuestMode) return; // Never ping if sitting on login screen
+    if (!accessToken && !isGuestMode) return;
     const tok = accessToken || guestToken;
     const srv = accessToken ? homeserver : FALLBACK_SERVER;
     if (!tok || !backendRandomRoomId) return;
@@ -248,7 +246,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Track user activity & enforce 10-minute guest inactivity timeout
   ["keydown", "mousedown", "touchstart"].forEach(evt => {
     window.addEventListener(evt, () => { lastActivityTs = Date.now(); }, { passive: true });
   });
@@ -431,9 +428,9 @@ document.addEventListener("DOMContentLoaded", () => {
     if (sidebarRooms.at(0)) await selectStumpChannel(sidebarRooms.at(0));
     if (asGuest) {
       addChatLine("SYSTEM", `GUEST DISPLAY NAME: ${guestName} (SAVED)`);
-      addChatLine("SYSTEM", "SIGN IN WITH ELEMENT TO UNLOCK [★ VIP] & CUSTOM ROOMS!");
+      addChatLine("SYSTEM", "SIGN IN WITH ELEMENT TO SEND GLOBAL SFX & UNLOCK [★ VIP]!");
     } else {
-      addChatLine("SYSTEM", `LOGGED IN AS ${userId} [★ VIP TAB UNLOCKED]`, true);
+      addChatLine("SYSTEM", `LOGGED IN AS ${userId} [★ GLOBAL SFX & VIP UNLOCKED]`, true);
     }
 
     if (tok && !isSyncing) { isSyncing = true; startSyncLoop(); }
@@ -478,6 +475,11 @@ document.addEventListener("DOMContentLoaded", () => {
               }
             } else if (body.startsWith("[VIP_FLARE]")) {
               showVipFlareBanner(formatDisplayName(ev.sender), body.slice(11));
+            } else if (body.startsWith("[SFX|")) {
+              const sfxName = body.slice(5, -1).trim();
+              const senderNick = formatDisplayName(ev.sender);
+              window.playMonkeSound?.(sfxName, true);
+              showGtagNotification("★ GLOBAL SOUNDBOARD", `${senderNick} PLAYED [${sfxName.toUpperCase()}]`);
             }
           }
         }
@@ -499,6 +501,20 @@ document.addEventListener("DOMContentLoaded", () => {
       } catch (_) { await new Promise(r => setTimeout(r, 3000)); }
     }
   }
+  let lastGlobalSfxTs = 0;
+  window.broadcastGlobalSound = async function(soundKey) {
+    if (!accessToken || !backendRandomRoomId) return;
+    const now = Date.now();
+    if (now - lastGlobalSfxTs < 2500) {
+      return triggerModToast("SFX COOLDOWN", "WAIT 2 SECONDS BETWEEN GLOBAL SOUNDS!");
+    }
+    lastGlobalSfxTs = now;
+    await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/sfx_${now}`, {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "m.notice", body: `[SFX|${soundKey}]` })
+    }).catch(() => {});
+  };
 
   async function sendMessage(text) {
     const tok = accessToken || guestToken;
