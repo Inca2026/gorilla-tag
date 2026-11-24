@@ -1,4 +1,4 @@
-// BUILT-IN WEB AUDIO MONKE SOUNDBOARD, GLOBAL VIP SFX, VOLUME HOOKS & SAVABLE CLIENT MODS
+// BUILT-IN WEB AUDIO MONKE SOUNDBOARD, GLOBAL VIP SFX, PRESETS, BREACH & CLIENT MODS
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 const originalGainConnect = GainNode.prototype.connect;
 const gameGainNodes = new WeakSet();
@@ -83,35 +83,37 @@ function isElementLoggedIn() {
 
 const DEFAULT_MOD_CONFIG = {
   fov: 1.0, sat: 100, bright: 100, contrast: 100, gameVol: 100, menuVol: 100,
-  leaderboard: true, termsfx: true, nightvision: false, crt: false, crosshair: false,
-  fps: false, rainbow: false, deepfried: false, invert: false, retro: false,
-  vignette: false, cinematic: false, lavavision: false, blueprint: false,
+  leaderboard: true, termsfx: true, hudhint: true, nightvision: false, crt: false,
+  crosshair: false, fps: false, rainbow: false, deepfried: false, invert: false,
+  retro: false, vignette: false, cinematic: false, lavavision: false, blueprint: false,
   speedlines: false, sessionclock: false, keystrokes: false, mirrorview: false,
-  rgbcrosshair: false, goldenui: false, chatnotify: false, vhsglitch: false,
-  ultrafov: false, stumpbeacon: false, rgbhud: false, vipreticle: false,
-  autohop: false, matrixrain: false
+  camcorder: false, rgbcrosshair: false, goldenui: false, chatnotify: false,
+  vhsglitch: false, ultrafov: false, stumpbeacon: false, rgbhud: false,
+  vipreticle: false, autohop: false, matrixrain: false, shifttoggle: false
 };
 
 const MOD_LABELS = {
-  leaderboard: "LEADERBOARD", termsfx: "TERMINAL SFX", nightvision: "NIGHT VISION",
-  crt: "CRT SCANLINES", crosshair: "CROSSHAIR", fps: "FPS COUNTER",
-  rainbow: "RGB MONKE", deepfried: "DEEP FRIED", invert: "X-RAY INVERT",
-  retro: "GAMEBOY MODE", vignette: "TUNNEL VISION", cinematic: "CINEMATIC BARS",
-  lavavision: "LAVA VISION", blueprint: "BLUEPRINT WIRE", speedlines: "SPEED LINES",
-  sessionclock: "SESSION CLOCK", keystrokes: "KEYSTROKE HUD", mirrorview: "MIRROR WORLD",
+  leaderboard: "LEADERBOARD", termsfx: "TERMINAL SFX", hudhint: "HUD HINT",
+  nightvision: "NIGHT VISION", crt: "CRT SCANLINES", crosshair: "CROSSHAIR",
+  fps: "FPS COUNTER", rainbow: "RGB MONKE", deepfried: "DEEP FRIED",
+  invert: "X-RAY INVERT", retro: "GAMEBOY MODE", vignette: "TUNNEL VISION",
+  cinematic: "CINEMATIC BARS", lavavision: "LAVA VISION", blueprint: "BLUEPRINT WIRE",
+  speedlines: "SPEED LINES", sessionclock: "SESSION CLOCK", keystrokes: "KEYSTROKE HUD",
+  mirrorview: "MIRROR WORLD", camcorder: "CAMCORDER HUD",
   rgbcrosshair: "RGB RETICLE", goldenui: "GOLD TERMINAL", chatnotify: "CHAT PING SFX",
   vhsglitch: "VHS TRACKING", ultrafov: "QUAKE PRO FOV", stumpbeacon: "ONLINE RADAR PING",
   rgbhud: "RAINBOW HUD BORDERS", vipreticle: "DIAMOND RETICLE",
-  autohop: "SPACEBAR AUTO-HOP", matrixrain: "MATRIX TINT OVERLAY"
+  autohop: "SPACEBAR AUTO-HOP", matrixrain: "MATRIX TINT OVERLAY",
+  shifttoggle: "HOLD SHIFT TOGGLE"
 };
 
 const ELEMENT_EXCLUSIVE_MODS = new Set([
   "rgbcrosshair", "goldenui", "chatnotify", "vhsglitch", "ultrafov",
-  "stumpbeacon", "rgbhud", "vipreticle", "autohop", "matrixrain"
+  "stumpbeacon", "rgbhud", "vipreticle", "autohop", "matrixrain", "shifttoggle"
 ]);
 
 let modConfig = { ...DEFAULT_MOD_CONFIG };
-let fpsInterval = null, rainbowInterval = null, autoHopInterval = null;
+let fpsInterval = null, rainbowInterval = null, autoHopInterval = null, camcorderInterval = null;
 let rainbowHue = 0, frameCount = 0, sessionStartTime = Date.now();
 
 function triggerModToast(title, text) {
@@ -126,6 +128,43 @@ function triggerModToast(title, text) {
   clearTimeout(window.gtagModToastTimer);
   window.gtagModToastTimer = setTimeout(() => toast.classList.add("gtag-hidden"), 3000);
 }
+
+window.applyModPreset = function(presetName) {
+  const visualKeys = [
+    "nightvision", "crt", "crosshair", "rainbow", "deepfried", "invert", "retro",
+    "vignette", "cinematic", "lavavision", "blueprint", "speedlines", "mirrorview",
+    "camcorder", "vhsglitch", "matrixrain"
+  ];
+  visualKeys.forEach(k => { modConfig[k] = false; });
+  modConfig.fov = 1.0; modConfig.sat = 100; modConfig.bright = 100; modConfig.contrast = 100;
+
+  if (presetName === "camcorder") {
+    modConfig.camcorder = true;
+    modConfig.crt = true;
+    modConfig.vignette = true;
+    modConfig.sat = 80;
+    modConfig.contrast = 120;
+    modConfig.fov = 1.15;
+  } else if (presetName === "horror") {
+    modConfig.nightvision = true;
+    modConfig.vignette = true;
+    modConfig.crt = true;
+    modConfig.bright = 85;
+  } else if (presetName === "gameboy") {
+    modConfig.retro = true;
+    modConfig.cinematic = true;
+    modConfig.contrast = 135;
+  } else if (presetName === "cyberpunk") {
+    modConfig.blueprint = true;
+    modConfig.speedlines = true;
+    modConfig.crosshair = true;
+    modConfig.fov = 1.25;
+  }
+
+  syncModUI();
+  playTerminalSfx("vip");
+  triggerModToast("PRESET APPLIED", `LOADED [${presetName.toUpperCase()}] VISUAL PROFILE!`);
+};
 
 function applyVisualFilters() {
   const canvas = document.getElementById("unity-canvas");
@@ -214,11 +253,20 @@ window.applyIncomingHack = function(effect, state, attackerName) {
   );
 };
 
+window.applyRemoteHudToggle = function(modKey, state, attackerName) {
+  if (!(modKey in modConfig)) return;
+  modConfig[modKey] = Boolean(state);
+  syncModUI();
+  playTerminalSfx("error");
+  triggerModToast("⚠ HUD HIJACKED", `${attackerName.toUpperCase()} SET [${MOD_LABELS[modKey] || modKey.toUpperCase()}] TO ${state ? "ON" : "OFF"}`);
+};
+
 window.clearAllIncomingHacks = function() {
   window.activeHackEffects = { screen: false, movement: false, invert: false, hud: false, puppet: false };
   window.releaseAllMovementKeys();
   modConfig.mirrorview = false;
   modConfig.invert = false;
+  modConfig.crt = false;
   syncModUI();
   updateHackOverlayIndicators();
 };
@@ -261,6 +309,12 @@ const INVERT_KEY = { w: "s", s: "w", a: "d", d: "a", W: "S", S: "W", A: "D", D: 
     if (!e.isTrusted) return;
     if (!document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden")) return;
     const fx = window.activeHackEffects;
+
+    if (modConfig.shifttoggle && isElementLoggedIn() && (e.code === "ShiftLeft" || e.code === "ShiftRight")) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      return;
+    }
 
     if ((fx.movement || fx.puppet) && MOVEMENT_CODES.has(e.code)) {
       e.preventDefault();
@@ -310,13 +364,31 @@ function syncModUI() {
   });
 
   document.getElementById("gtag-leaderboard")?.classList.toggle("gtag-hidden", !modConfig.leaderboard);
+  document.getElementById("gtag-hud-hint")?.classList.toggle("gtag-hidden", !modConfig.hudhint);
   document.getElementById("crt-overlay")?.classList.toggle("gtag-hidden", !modConfig.crt);
   document.getElementById("gtag-crosshair")?.classList.toggle("gtag-hidden", !(modConfig.crosshair || modConfig.rgbcrosshair || modConfig.vipreticle));
   document.getElementById("gtag-vignette")?.classList.toggle("gtag-hidden", !modConfig.vignette);
   document.getElementById("gtag-cinematic")?.classList.toggle("gtag-hidden", !modConfig.cinematic);
   document.getElementById("gtag-speedlines")?.classList.toggle("gtag-hidden", !modConfig.speedlines);
   document.getElementById("gtag-keystrokes")?.classList.toggle("gtag-hidden", !modConfig.keystrokes);
+  document.getElementById("gtag-camcorder-overlay")?.classList.toggle("gtag-hidden", !modConfig.camcorder);
   document.querySelector(".gtag-terminal")?.classList.toggle("golden-theme", Boolean(modConfig.goldenui && loggedIn));
+
+  const canvas = document.getElementById("unity-canvas");
+  if (canvas) {
+    const shiftActive = Boolean(modConfig.shifttoggle && loggedIn);
+    canvas.dispatchEvent(new KeyboardEvent(shiftActive ? "keydown" : "keyup", { key: "Shift", code: "ShiftLeft", keyCode: 16, which: 16, bubbles: true }));
+  }
+
+  clearInterval(camcorderInterval);
+  if (modConfig.camcorder) {
+    const updateCamTime = () => {
+      const el = document.getElementById("camcorder-timecode");
+      if (el) el.textContent = new Date().toLocaleTimeString([], { hour12: false });
+    };
+    updateCamTime();
+    camcorderInterval = setInterval(updateCamTime, 1000);
+  }
 
   const aboutStatus = document.getElementById("about-account-status");
   if (aboutStatus) {
@@ -333,10 +405,10 @@ function syncModUI() {
   clearInterval(autoHopInterval);
   if (modConfig.autohop && loggedIn) {
     autoHopInterval = setInterval(() => {
-      const canvas = document.getElementById("unity-canvas");
-      if (!canvas || !document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden")) return;
-      canvas.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", keyCode: 32, bubbles: true }));
-      setTimeout(() => canvas.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", keyCode: 32, bubbles: true })), 60);
+      const c = document.getElementById("unity-canvas");
+      if (!c || !document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden")) return;
+      c.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", keyCode: 32, bubbles: true }));
+      setTimeout(() => c.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", keyCode: 32, bubbles: true })), 60);
     }, 380);
   }
 
