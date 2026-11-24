@@ -204,3 +204,25 @@ input:-webkit-autofill { -webkit-box-shadow: 0 0 0 30px #111811 inset !important
 .gtag-lb-list { max-height: 160px; overflow-y: auto; display: flex; flex-direction: column; gap: 6px; }
 .lb-row { display: flex; justify-content: space-between; font-size: 8px; color: #ffaa00; }
 .lb-row.self-entry { color: #33ff33; }
+/* VIP Flare Inline Input Styling */
+#vip-flare-input {
+  flex: 1;
+  width: 100%;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid #ffaa00;
+  color: #ffdd44;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px;
+  outline: none;
+  padding: 6px 2px;
+}
+
+#vip-flare-input::placeholder {
+  color: #775511;
+}
+
+#vip-flare-input:-webkit-autofill {
+  -webkit-box-shadow: 0 0 0 30px #111811 inset !important;
+  -webkit-text-fill-color: #ffdd44 !important;
+}
