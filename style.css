@@ -77,21 +77,24 @@ body, html {
   padding: 10px; border: 2px solid #1f3d1f;
   word-wrap: break-word;
 }
+#chat-messages::-webkit-scrollbar { width: 8px; }
+#chat-messages::-webkit-scrollbar-track { background: #0a0f0a; }
+#chat-messages::-webkit-scrollbar-thumb { background: #33ff33; }
+
 .chat-line { margin-bottom: 6px; }
 .chat-user { color: #ffaa00; }
+
+/* Shared Input Row Styling (Chat + Music Link) */
 .gtag-input-row { display: flex; align-items: center; gap: 8px; }
-#chat-input {
+#chat-input, #music-link-input {
   width: 100%; background: transparent;
   border: none; border-bottom: 2px solid #33ff33;
   color: #33ff33; font-family: 'Press Start 2P', monospace;
   font-size: 10px; outline: none; padding: 6px 2px;
 }
-
-/* Spotify Panel */
-#tab-music { text-align: center; padding: 16px 0; }
-#track-info {
-  font-size: 10px; line-height: 1.6;
-  margin-bottom: 18px; color: #ffaa00;
-  min-height: 32px;
+#chat-input::placeholder, #music-link-input::placeholder {
+  color: #1f661f;
 }
-.gtag-btn-group { display: flex; justify-content: center; gap: 10px; }
+
+/* Music Panel */
+#tab-music { text-align: center; padding: 6px 0; }
