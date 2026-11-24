@@ -1,7 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   const STUMP_CHANNELS = [
     { alias: "#stump-network-general:matrix.org", name: "general", type: "text" },
-    { alias: "#stump-network-random:matrix.org", name: "random", type: "text" },
     { alias: "#stump-network-vc:matrix.org", name: "vc", type: "voice" }
   ];
   const FALLBACK_SERVER = "https://matrix.org";
@@ -20,7 +19,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let homeserver = localStorage.getItem("gtag_mx_server") || FALLBACK_SERVER;
   let activeRoomId = localStorage.getItem("gtag_mx_custom_room") || "";
   let activeChannelKey = "general";
-  let vcLoaded = false;
 
   let guestToken = sessionStorage.getItem("gtag_lb_guest_token") || "";
   let guestUserId = sessionStorage.getItem("gtag_lb_guest_user") || "";
@@ -30,6 +28,16 @@ document.addEventListener("DOMContentLoaded", () => {
   let isSyncing = false;
   let sidebarRooms = [];
   let toastTimeout = null;
+
+  // --- CUSTOM WEBRTC VOICE CHAT STATE (#vc) ---
+  let localAudioStream = null;
+  let vcJoined = false;
+  let vcMuted = false;
+  let micAnalyserInterval = null;
+  const peerConnections = new Map(); // senderUserId -> RTCPeerConnection
+  const remoteAudioEls = new Map();  // senderUserId -> HTMLAudioElement
+  const activeVcMembers = new Map(); // displayUser -> lastHeartbeatMs
+  const ICE_CONFIG = { iceServers: [{ urls: "stun:://google.com" }] };
 
   // --- ONLINE PLAYTIME TRACKING (ZERO CHAT MESSAGES) ---
   let totalPlaySeconds = parseInt(localStorage.getItem("gtag_total_playtime") || "0", 10);
@@ -84,6 +92,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const label = `#${idx + 1} ${entry.name.slice(0, 12)}`;
       return `<div class="${cls}"><span>${label}</span><span>${formatPlaytime(entry.seconds)}</span></div>`;
     }).join("");
+
+    // Also refresh VC participant list
+    renderVcUsersList();
   }, 1000);
 
   async function sendSilentPresence() {
@@ -92,6 +103,7 @@ document.addEventListener("DOMContentLoaded", () => {
     const srv = accessToken ? homeserver : FALLBACK_SERVER;
     if (!tok || !uid) return;
 
+    const tag = vcJoined ? `GTAG_VC:${totalPlaySeconds}` : `GTAG_TIME:${totalPlaySeconds}`;
     try {
       await fetch(`${srv}/_matrix/client/v3/presence/${encodeURIComponent(uid)}/status`, {
         method: "PUT",
@@ -101,13 +113,13 @@ document.addEventListener("DOMContentLoaded", () => {
         },
         body: JSON.stringify({
           presence: "online",
-          status_msg: `GTAG_TIME:${totalPlaySeconds}`
+          status_msg: tag
         })
       });
     } catch (_) {}
   }
 
-  setInterval(sendSilentPresence, 20000);
+  setInterval(sendSilentPresence, 15000);
 
   function setStatus(msg, isError = false) {
     if (!statusLabel) return;
@@ -150,6 +162,218 @@ document.addEventListener("DOMContentLoaded", () => {
     msgBox.appendChild(row);
     msgBox.scrollTop = msgBox.scrollHeight;
   }
+  // --- CUSTOM WEBRTC VOICE ENGINE (AUDIO ONLY, ZERO IFRAME) ---
+  function renderVcUsersList() {
+    const listEl = document.getElementById("vc-users-list");
+    const countEl = document.getElementById("vc-peer-count");
+    if (!listEl) return;
+
+    const now = Date.now();
+    const rows = [];
+    if (vcJoined) {
+      const me = formatDisplayName(userId || "YOU");
+      rows.push(`<div class="vc-user-row"><span>${me} (YOU)</span><span>${vcMuted ? "MUTED" : "LIVE"}</span></div>`);
+    }
+
+    activeVcMembers.forEach((lastTs, name) => {
+      if (now - lastTs > 45000) return;
+      rows.push(`<div class="vc-user-row"><span>${name}</span><span>CONNECTED</span></div>`);
+    });
+
+    if (countEl) countEl.textContent = `${rows.length} IN VC`;
+    listEl.innerHTML = rows.length > 0
+      ? rows.join("")
+      : `<div style="color:#888;">NO ONE IN VOICE CHANNEL YET.</div>`;
+  }
+
+  async function sendVoiceSignal(targetUser, signalObj) {
+    if (!accessToken || !activeRoomId) return;
+    const txnId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const url = `${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.gtag.voice/${txnId}`;
+    try {
+      await fetch(url, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          to: targetUser,
+          signal: signalObj
+        })
+      });
+    } catch (_) {}
+  }
+
+  function createVoicePeer(remoteUserId, isInitiator) {
+    if (peerConnections.has(remoteUserId)) {
+      peerConnections.get(remoteUserId).close();
+    }
+
+    const pc = new RTCPeerConnection(ICE_CONFIG);
+    peerConnections.set(remoteUserId, pc);
+
+    if (localAudioStream) {
+      localAudioStream.getTracks().forEach(track => pc.addTrack(track, localAudioStream));
+    }
+
+    pc.onicecandidate = (e) => {
+      if (e.candidate) {
+        sendVoiceSignal(remoteUserId, { type: "ice", candidate: e.candidate });
+      }
+    };
+
+    pc.ontrack = (e) => {
+      let audioEl = remoteAudioEls.get(remoteUserId);
+      if (!audioEl) {
+        audioEl = document.createElement("audio");
+        audioEl.autoplay = true;
+        document.body.appendChild(audioEl);
+        remoteAudioEls.set(remoteUserId, audioEl);
+      }
+      audioEl.srcObject = e.streams.at(0);
+    };
+
+    if (isInitiator) {
+      pc.createOffer().then(offer => {
+        pc.setLocalDescription(offer);
+        sendVoiceSignal(remoteUserId, { type: "offer", sdp: offer });
+      }).catch(() => {});
+    }
+
+    return pc;
+  }
+
+  async function handleIncomingVoiceSignal(senderId, content) {
+    if (!vcJoined || senderId === userId) return;
+    if (content.to && content.to !== userId && content.to !== "*") return;
+
+    const sig = content.signal;
+    if (!sig) return;
+
+    activeVcMembers.set(formatDisplayName(senderId), Date.now());
+
+    if (sig.type === "hello") {
+      createVoicePeer(senderId, true);
+    } else if (sig.type === "offer") {
+      const pc = createVoicePeer(senderId, false);
+      await pc.setRemoteDescription(new RTCSessionDescription(sig.sdp));
+      const answer = await pc.createAnswer();
+      await pc.setLocalDescription(answer);
+      sendVoiceSignal(senderId, { type: "answer", sdp: answer });
+    } else if (sig.type === "answer") {
+      const pc = peerConnections.get(senderId);
+      if (pc) await pc.setRemoteDescription(new RTCSessionDescription(sig.sdp));
+    } else if (sig.type === "ice") {
+      const pc = peerConnections.get(senderId);
+      if (pc && sig.candidate) {
+        await pc.addIceCandidate(new RTCIceCandidate(sig.candidate)).catch(() => {});
+      }
+    } else if (sig.type === "bye") {
+      activeVcMembers.delete(formatDisplayName(senderId));
+      peerConnections.get(senderId)?.close();
+      peerConnections.delete(senderId);
+    }
+  }
+
+  async function joinStumpVoice() {
+    if (vcJoined) return;
+    const statusEl = document.getElementById("vc-status-text");
+    const joinBtn = document.getElementById("btn-vc-join");
+    const muteBtn = document.getElementById("btn-vc-mute");
+    const leaveBtn = document.getElementById("btn-vc-leave");
+
+    try {
+      if (statusEl) statusEl.textContent = "REQUESTING MIC ACCESS...";
+      localAudioStream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
+      vcJoined = true;
+      vcMuted = false;
+
+      if (statusEl) statusEl.textContent = "VOICE RELAY: CONNECTED";
+      if (joinBtn) { joinBtn.disabled = true; joinBtn.classList.add("active"); }
+      if (muteBtn) { muteBtn.disabled = false; muteBtn.textContent = "MUTE: OFF"; }
+      if (leaveBtn) leaveBtn.disabled = false;
+
+      // Live mic level meter
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+      const src = ctx.createMediaStreamSource(localAudioStream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      src.connect(analyser);
+      const dataArr = new Uint8Array(analyser.frequencyBinCount);
+
+      clearInterval(micAnalyserInterval);
+      micAnalyserInterval = setInterval(() => {
+        const bar = document.getElementById("vc-mic-bar");
+        if (!bar || !vcJoined || vcMuted) {
+          if (bar) bar.style.width = "0%";
+          return;
+        }
+        analyser.getByteFrequencyData(dataArr);
+        let sum = 0;
+        for (let i = 0; i < dataArr.length; i++) sum += dataArr.at(i);
+        const avg = Math.min(100, Math.round((sum / dataArr.length) * 2.2));
+        bar.style.width = `${avg}%`;
+      }, 80);
+
+      if (typeof playTerminalSfx === "function") playTerminalSfx("send");
+      await sendSilentPresence();
+      await sendVoiceSignal("*", { type: "hello" });
+      renderVcUsersList();
+    } catch (err) {
+      if (typeof playTerminalSfx === "function") playTerminalSfx("error");
+      if (statusEl) statusEl.textContent = `MIC ERROR: ${err.message}`;
+    }
+  }
+
+  function leaveStumpVoice() {
+    if (!vcJoined) return;
+    sendVoiceSignal("*", { type: "bye" });
+    vcJoined = false;
+    vcMuted = false;
+    clearInterval(micAnalyserInterval);
+
+    if (localAudioStream) {
+      localAudioStream.getTracks().forEach(t => t.stop());
+      localAudioStream = null;
+    }
+
+    peerConnections.forEach(pc => pc.close());
+    peerConnections.clear();
+    remoteAudioEls.forEach(el => el.remove());
+    remoteAudioEls.clear();
+
+    const statusEl = document.getElementById("vc-status-text");
+    const joinBtn = document.getElementById("btn-vc-join");
+    const muteBtn = document.getElementById("btn-vc-mute");
+    const leaveBtn = document.getElementById("btn-vc-leave");
+    const bar = document.getElementById("vc-mic-bar");
+
+    if (statusEl) statusEl.textContent = "VOICE RELAY: DISCONNECTED";
+    if (joinBtn) { joinBtn.disabled = false; joinBtn.classList.remove("active"); }
+    if (muteBtn) { muteBtn.disabled = true; muteBtn.textContent = "MUTE: OFF"; muteBtn.classList.remove("active"); }
+    if (leaveBtn) leaveBtn.disabled = true;
+    if (bar) bar.style.width = "0%";
+
+    if (typeof playTerminalSfx === "function") playTerminalSfx("close");
+    sendSilentPresence();
+    renderVcUsersList();
+  }
+
+  document.getElementById("btn-vc-join")?.addEventListener("click", joinStumpVoice);
+  document.getElementById("btn-vc-leave")?.addEventListener("click", leaveStumpVoice);
+  document.getElementById("btn-vc-mute")?.addEventListener("click", () => {
+    if (!localAudioStream) return;
+    vcMuted = !vcMuted;
+    localAudioStream.getAudioTracks().forEach(t => { t.enabled = !vcMuted; });
+    const muteBtn = document.getElementById("btn-vc-mute");
+    if (muteBtn) {
+      muteBtn.textContent = `MUTE: ${vcMuted ? "ON" : "OFF"}`;
+      muteBtn.classList.toggle("active", vcMuted);
+    }
+    if (typeof playTerminalSfx === "function") playTerminalSfx("click");
+    renderVcUsersList();
+  });
   async function initGuestLeaderboardSession() {
     if (accessToken) return;
     try {
@@ -282,7 +506,7 @@ document.addEventListener("DOMContentLoaded", () => {
       btn.type = "button";
       const isSelected = rm.name === activeChannelKey;
       btn.className = isSelected ? "gtag-room-item active" : "gtag-room-item";
-      btn.textContent = rm.type === "voice" ? `🔊 #${rm.name}` : `#${rm.name}`;
+      btn.textContent = `#${rm.name}`;
       btn.title = rm.alias || rm.name;
       btn.onclick = () => {
         if (typeof playTerminalSfx === "function") playTerminalSfx("tab");
@@ -301,20 +525,13 @@ document.addEventListener("DOMContentLoaded", () => {
     renderRoomSidebar();
 
     if (channelObj.type === "voice") {
-      if (label) label.textContent = "STUMP NETWORK // VOICE CHAT";
+      if (label) label.textContent = "STUMP NETWORK // #VC";
       textPanel.classList.add("gtag-hidden");
       vcPanel.classList.remove("gtag-hidden");
-
-      const vcFrame = document.getElementById("vc-frame");
-      if (!vcLoaded && vcFrame) {
-        const displayName = formatDisplayName(userId || "MONKE");
-        vcFrame.src = `https://element.io{encodeURIComponent(displayName)}`;
-        vcLoaded = true;
-      }
+      renderVcUsersList();
       return;
     }
 
-    // Otherwise show Text Chat Panel
     vcPanel.classList.add("gtag-hidden");
     textPanel.classList.remove("gtag-hidden");
     if (label) label.textContent = `STUMP NETWORK // #${channelObj.name.toUpperCase()}`;
@@ -448,15 +665,21 @@ document.addEventListener("DOMContentLoaded", () => {
 
             if (state === "offline") {
               onlinePlayers.delete(pName);
-            } else if (state === "online" || statusMsg.startsWith("GTAG_TIME:")) {
-              const parsedSec = statusMsg.startsWith("GTAG_TIME:")
-                ? parseInt(statusMsg.replace("GTAG_TIME:", ""), 10) || 0
-                : (onlinePlayers.get(pName)?.seconds || 0);
+              activeVcMembers.delete(pName);
+            } else if (state === "online" || statusMsg.startsWith("GTAG_")) {
+              const numStr = statusMsg.replace(/^GTAG_(TIME|VC):/, "");
+              const parsedSec = parseInt(numStr, 10) || (onlinePlayers.get(pName)?.seconds || 0);
 
               onlinePlayers.set(pName, {
                 seconds: parsedSec,
                 lastSeen: Date.now()
               });
+
+              if (statusMsg.startsWith("GTAG_VC:")) {
+                activeVcMembers.set(pName, Date.now());
+              } else {
+                activeVcMembers.delete(pName);
+              }
             }
           }
         }
@@ -466,6 +689,11 @@ document.addEventListener("DOMContentLoaded", () => {
         const events = stumpData?.timeline?.events || [];
 
         for (const ev of events) {
+          if (ev.type === "m.gtag.voice" && !isInitialSync) {
+            await handleIncomingVoiceSignal(ev.sender, ev.content);
+            continue;
+          }
+
           if (ev.type === "m.room.message" && ev.content?.body) {
             const body = ev.content.body;
             if (/^\[(TIME|POS):/.test(body)) continue;
@@ -527,20 +755,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // Leave VC button inside the #vc panel
-  const vcLeaveBtn = document.getElementById("btn-vc-disconnect");
-  if (vcLeaveBtn) {
-    vcLeaveBtn.onclick = () => {
-      const vcFrame = document.getElementById("vc-frame");
-      if (vcFrame) vcFrame.src = "about:blank";
-      vcLoaded = false;
-      if (typeof playTerminalSfx === "function") playTerminalSfx("close");
-      const gen = sidebarRooms.at(0);
-      if (gen) selectStumpChannel(gen);
-    };
-  }
-
-  // "+" Button to add another Stump Network channel
   const addRoomBtn = document.getElementById("btn-add-room");
   if (addRoomBtn) {
     addRoomBtn.onclick = async (e) => {
@@ -570,13 +784,11 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function handleLogout() {
+    leaveStumpVoice();
     accessToken = "";
     userId = "";
     syncToken = "";
     isSyncing = false;
-    vcLoaded = false;
-    const vcFrame = document.getElementById("vc-frame");
-    if (vcFrame) vcFrame.src = "about:blank";
     localStorage.removeItem("gtag_mx_token");
     localStorage.removeItem("gtag_mx_user");
     localStorage.removeItem("gtag_mx_server");
