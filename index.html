@@ -5,9 +5,13 @@
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <title>Gorilla Tag Web</title>
   <link href="https://googleapis.com" rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=3">
 </head>
 <body>
+
+  <!-- Optional CRT Scanline & Crosshair Overlays -->
+  <div id="crt-overlay" class="gtag-hidden"></div>
+  <div id="gtag-crosshair" class="gtag-hidden">+</div>
 
   <!-- Unity Container -->
   <div id="unity-container">
@@ -19,63 +23,96 @@
   </div>
 
   <!-- On-Screen Keybind Reminder -->
-  <div id="gtag-hud-hint">[TAB] TERMINAL | [T] CHAT | [M] MUSIC</div>
+  <div id="gtag-hud-hint">[TAB] TERMINAL | [T] CHAT | [B] SOUNDBOARD</div>
 
   <!-- Custom Gorilla Tag Stump Computer Overlay -->
   <div id="gtag-overlay" class="gtag-hidden">
     <div class="gtag-terminal">
       <div class="gtag-header">
-        <span>GORILLA OS v1.5 // [TAB] CLOSE</span>
+        <span>GORILLA OS v2.0 // [TAB] CLOSE</span>
         <div>
           <button id="btn-tab-chat" class="gtag-btn active" onclick="switchTab('chat')">CHAT</button>
-          <button id="btn-tab-music" class="gtag-btn" onclick="switchTab('music')">MUSIC</button>
+          <button id="btn-tab-sounds" class="gtag-btn" onclick="switchTab('sounds')">SOUNDS</button>
+          <button id="btn-tab-mods" class="gtag-btn" onclick="switchTab('mods')">MODS</button>
         </div>
       </div>
 
-      <!-- Messaging Interface (Element / Matrix Default Room) -->
+      <!-- Messaging Interface (Element Account Login + Stump Network) -->
       <div id="tab-chat">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:8px; color:#888;">
-          <span id="matrix-room-label">ROOM: #gorillatag:matrix.org</span>
-          <a href="https://element.io" target="_blank" style="color:#33ff33; text-decoration:none;">[OPEN IN ELEMENT]</a>
+        <!-- Element Sign-In Form -->
+        <div id="matrix-login-box" style="padding: 12px 0;">
+          <div style="font-size: 9px; color: #ffaa00; margin-bottom: 12px; line-height: 1.6;">
+            SIGN IN WITH ELEMENT / MATRIX TO JOIN "STUMP NETWORK"
+          </div>
+          <div class="gtag-input-row" style="margin-bottom: 10px;">
+            <span>USER:</span>
+            <input type="text" id="matrix-user-input" placeholder="@username:matrix.org" autocomplete="off" />
+          </div>
+          <div class="gtag-input-row" style="margin-bottom: 14px;">
+            <span>PASS:</span>
+            <input type="password" id="matrix-pass-input" placeholder="********" autocomplete="off" />
+          </div>
+          <div style="display:flex; gap:8px; align-items:center;">
+            <button id="matrix-login-btn" class="gtag-btn" onclick="loginElementAccount()">SIGN IN &amp; JOIN</button>
+            <a href="https://element.io" target="_blank" style="font-size:8px; color:#33ff33; text-decoration:none;">[CREATE ACCOUNT]</a>
+          </div>
+          <div id="matrix-login-error" style="font-size:8px; color:#ff4444; margin-top:10px;"></div>
         </div>
-        <div id="chat-messages">
-          <div class="chat-line" style="color:#888;">* BOOTING ELEMENT RELAY *</div>
-        </div>
-        <div class="gtag-input-row">
-          <span>&gt;</span>
-          <input type="text" id="chat-input" placeholder="TYPE MESSAGE + ENTER..." maxlength="120" autocomplete="off" />
+
+        <!-- Live Chat Room -->
+        <div id="matrix-chat-box" class="gtag-hidden">
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:8px; color:#888;">
+            <span id="matrix-room-label">ROOM: STUMP NETWORK</span>
+            <div>
+              <a href="https://matrix.to" target="_blank" style="color:#33ff33; text-decoration:none; margin-right:8px;">[ELEMENT]</a>
+              <button class="gtag-btn" style="font-size:7px; padding:3px 5px;" onclick="logoutElementAccount()">LOGOUT</button>
+            </div>
+          </div>
+          <div id="chat-messages">
+            <div class="chat-line" style="color:#888;">* CONNECTED TO STUMP NETWORK *</div>
+          </div>
+          <div class="gtag-input-row">
+            <span>&gt;</span>
+            <input type="text" id="chat-input" placeholder="TYPE MESSAGE + ENTER..." maxlength="150" autocomplete="off" />
+          </div>
         </div>
       </div>
 
-      <!-- Music Interface (SoundCloud + YouTube - Full Tracks, No Login) -->
-      <div id="tab-music" class="gtag-hidden">
-        <!-- Preset Gorilla Tag / Lo-Fi / Phonk Stations -->
-        <div style="display:flex; gap:6px; margin-bottom:10px; flex-wrap:wrap; justify-content:center;">
-          <button class="gtag-btn" onclick="loadPresetMusic('gtag')">GTAG OST</button>
-          <button class="gtag-btn" onclick="loadPresetMusic('lofi')">LO-FI BEATS</button>
-          <button class="gtag-btn" onclick="loadPresetMusic('phonk')">PHONK</button>
+      <!-- Gorilla Tag Retro Soundboard (100% Built-In Web Audio, Zero External Links) -->
+      <div id="tab-sounds" class="gtag-hidden">
+        <div style="font-size:8px; color:#888; margin-bottom:12px;">
+          MONKE SOUNDBOARD // CLICK OR PRESS [1-6] WHEN OPEN
         </div>
-
-        <!-- SoundCloud / YouTube Player Frame -->
-        <iframe id="music-embed" width="100%" height="166" scrolling="no" frameborder="no" allow="autoplay"
-          style="border:2px solid #33ff33; margin-bottom:10px; background:#000;"
-          src="https://soundcloud.com">
-        </iframe>
-
-        <!-- Paste any SoundCloud or YouTube Link -->
-        <div class="gtag-input-row">
-          <span>&gt;</span>
-          <input type="text" id="music-link-input" placeholder="PASTE SOUNDCLOUD OR YOUTUBE URL..." autocomplete="off" />
-          <button class="gtag-btn" onclick="loadCustomMusic()">PLAY</button>
+        <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:10px;">
+          <button class="gtag-btn" style="padding:14px 8px;" onclick="playMonkeSound('tag')">[1] TAG SLAP!</button>
+          <button class="gtag-btn" style="padding:14px 8px;" onclick="playMonkeSound('roundstart')">[2] ROUND START</button>
+          <button class="gtag-btn" style="padding:14px 8px;" onclick="playMonkeSound('monke')">[3] OOH-OOH-AAH</button>
+          <button class="gtag-btn" style="padding:14px 8px;" onclick="playMonkeSound('lava')">[4] LAVA ALERT</button>
+          <button class="gtag-btn" style="padding:14px 8px;" onclick="playMonkeSound('computer')">[5] STUMP BEEP</button>
+          <button class="gtag-btn" style="padding:14px 8px;" onclick="playMonkeSound('win')">[6] LAST MONKE</button>
         </div>
       </div>
+
+      <!-- Visual & HUD Mods Tab -->
+      <div id="tab-mods" class="gtag-hidden">
+        <div style="font-size:8px; color:#888; margin-bottom:12px;">
+          GORILLA OS CLIENT TWEAKS
+        </div>
+        <div style="display:flex; flex-direction:column; gap:10px;">
+          <button id="mod-nightvision" class="gtag-btn" onclick="toggleMod('nightvision')">NIGHT VISION: OFF</button>
+          <button id="mod-crt" class="gtag-btn" onclick="toggleMod('crt')">CRT SCANLINES: OFF</button>
+          <button id="mod-crosshair" class="gtag-btn" onclick="toggleMod('crosshair')">CENTER CROSSHAIR: OFF</button>
+          <button id="mod-fps" class="gtag-btn" onclick="toggleMod('fps')">LIVE FPS COUNTER: OFF</button>
+        </div>
+      </div>
+
     </div>
   </div>
 
   <!-- Modular Scripts -->
-  <script src="ui-keybinds.js"></script>
-  <script src="music.js"></script>
-  <script type="module" src="chat.js"></script>
+  <script src="ui-keybinds.js?v=3"></script>
+  <script src="soundboard.js?v=3"></script>
+  <script src="chat.js?v=3"></script>
 
   <!-- Unity 8-Part Loader -->
   <script>
