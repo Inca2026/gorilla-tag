@@ -1,3 +1,87 @@
+/* Widen terminal slightly to fit Room Selector Sidebar */
+.gtag-terminal {
+  width: 640px;
+  max-width: 96vw;
+}
+
+/* Split Chat + Room Selector Sidebar */
+.gtag-chat-layout {
+  display: flex;
+  gap: 10px;
+  align-items: stretch;
+}
+
+.gtag-room-sidebar {
+  width: 155px;
+  min-width: 155px;
+  background: #0a0f0a;
+  border: 2px solid #1f3d1f;
+  display: flex;
+  flex-direction: column;
+  padding: 6px;
+}
+
+.gtag-sidebar-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 7px;
+  color: #888;
+  border-bottom: 1px solid #1f3d1f;
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+}
+
+.gtag-sidebar-head button {
+  background: #1d2b1d;
+  color: #33ff33;
+  border: 1px solid #33ff33;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 8px;
+  padding: 2px 5px;
+  cursor: pointer;
+}
+
+.gtag-sidebar-head button:hover {
+  background: #33ff33;
+  color: #111811;
+}
+
+#room-sidebar-list {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  max-height: 225px;
+  overflow-y: auto;
+}
+
+.gtag-room-item {
+  background: #111811;
+  color: #33ff33;
+  border: 1px solid #1f3d1f;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 7px;
+  padding: 7px 5px;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gtag-room-item:hover,
+.gtag-room-item.active {
+  background: #33ff33;
+  color: #111811;
+  border-color: #33ff33;
+}
+
+.gtag-chat-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
 * { box-sizing: border-box; margin: 0; padding: 0; }
 body, html {
   width: 100%; height: 100%; overflow: hidden;
