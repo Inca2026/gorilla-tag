@@ -1,277 +1,260 @@
-// BUILT-IN WEB AUDIO MONKE SOUNDBOARD, TERMINAL SFX & SAVABLE CLIENT MODS
+// BUILT-IN WEB AUDIO MONKE SOUNDBOARD, TERMINAL SFX, VOLUME HOOKS & SAVABLE CLIENT MODS
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const originalGainConnect = GainNode.prototype.connect;
+const gameGainNodes = new WeakSet();
+
+GainNode.prototype.connect = function(...args) {
+  if (!this._isGorillaOS && this.context !== audioCtx) {
+    gameGainNodes.add(this);
+  }
+  return originalGainConnect.apply(this, args);
+};
+
+function applyAudioVolumes() {
+  const menuVol = (modConfig.menuVol ?? 100) / 100;
+  const gameVol = (modConfig.gameVol ?? 100) / 100;
+  document.querySelectorAll('audio, video').forEach(el => {
+    el.volume = Math.min(1, Math.max(0, gameVol));
+  });
+  window.gtagGameVolumeMultiplier = gameVol;
+  window.gtagMenuVolumeMultiplier = menuVol;
+}
 
 function playTone(freq, type, duration, delay = 0, slideTo = null, vol = 0.22) {
+  const menuVol = (modConfig.menuVol ?? 100) / 100;
+  if (menuVol <= 0.01) return;
   if (audioCtx.state === 'suspended') audioCtx.resume();
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
+  gain._isGorillaOS = true;
+  const finalVol = Math.max(0.001, vol * menuVol);
 
   osc.type = type;
   osc.frequency.setValueAtTime(freq, audioCtx.currentTime + delay);
-  if (slideTo) {
-    osc.frequency.exponentialRampToValueAtTime(slideTo, audioCtx.currentTime + delay + duration);
-  }
+  if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, audioCtx.currentTime + delay + duration);
 
-  gain.gain.setValueAtTime(vol, audioCtx.currentTime + delay);
-  gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + delay + duration);
-
+  gain.gain.setValueAtTime(finalVol, audioCtx.currentTime + delay);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + delay + duration);
   osc.connect(gain);
   gain.connect(audioCtx.destination);
-
   osc.start(audioCtx.currentTime + delay);
   osc.stop(audioCtx.currentTime + delay + duration);
 }
 
-// Retro Stump Computer UI Sound Effects
 window.playTerminalSfx = function(sfx) {
   if (!modConfig.termsfx) return;
-
-  if (sfx === 'open') {
-    playTone(320, 'square', 0.06, 0, 640, 0.14);
-    playTone(640, 'square', 0.08, 0.06, 960, 0.14);
-  } else if (sfx === 'close') {
-    playTone(720, 'square', 0.06, 0, 360, 0.14);
-    playTone(360, 'square', 0.08, 0.06, 180, 0.14);
-  } else if (sfx === 'tab') {
-    playTone(880, 'square', 0.045, 0, 1100, 0.12);
-  } else if (sfx === 'click') {
-    playTone(1050, 'square', 0.035, 0, null, 0.12);
-  } else if (sfx === 'send') {
-    playTone(580, 'triangle', 0.05, 0, 880, 0.15);
-    playTone(880, 'triangle', 0.07, 0.05, 1180, 0.15);
-  } else if (sfx === 'receive') {
-    playTone(740, 'square', 0.05, 0, null, 0.14);
-    playTone(980, 'square', 0.08, 0.06, null, 0.14);
-  } else if (sfx === 'error') {
-    playTone(220, 'sawtooth', 0.12, 0, 140, 0.16);
-  }
+  if (sfx === 'open') { playTone(320, 'square', 0.06, 0, 640, 0.14); playTone(640, 'square', 0.08, 0.06, 960, 0.14); }
+  else if (sfx === 'close') { playTone(720, 'square', 0.06, 0, 360, 0.14); playTone(360, 'square', 0.08, 0.06, 180, 0.14); }
+  else if (sfx === 'tab') { playTone(880, 'square', 0.045, 0, 1100, 0.12); }
+  else if (sfx === 'click') { playTone(1050, 'square', 0.035, 0, null, 0.12); }
+  else if (sfx === 'send') { playTone(580, 'triangle', 0.05, 0, 880, 0.15); playTone(880, 'triangle', 0.07, 0.05, 1180, 0.15); }
+  else if (sfx === 'receive') { playTone(740, 'square', 0.05, 0, null, 0.14); playTone(980, 'square', 0.08, 0.06, null, 0.14); }
+  else if (sfx === 'error') { playTone(220, 'sawtooth', 0.12, 0, 140, 0.16); }
+  else if (sfx === 'vip') { playTone(523.25, 'triangle', 0.08, 0, 783.99, 0.18); playTone(1046.5, 'triangle', 0.14, 0.08, 1318.5, 0.18); }
 };
 
 function playMonkeSound(sound) {
-  if (sound === 'tag') {
-    playTone(180, 'sawtooth', 0.12, 0, 60);
-    playTone(520, 'square', 0.18, 0.08, 380);
-  } else if (sound === 'roundstart') {
-    playTone(440, 'square', 0.15, 0);
-    playTone(440, 'square', 0.15, 0.25);
-    playTone(440, 'square', 0.15, 0.5);
-    playTone(880, 'sawtooth', 0.4, 0.75);
-  } else if (sound === 'monke') {
-    playTone(320, 'triangle', 0.14, 0, 480);
-    playTone(340, 'triangle', 0.14, 0.18, 500);
-    playTone(620, 'sawtooth', 0.28, 0.36, 260);
-  } else if (sound === 'lava') {
-    playTone(95, 'sawtooth', 0.5, 0, 45);
-    playTone(1200, 'square', 0.25, 0.1, 300);
-  } else if (sound === 'computer') {
-    playTone(950, 'square', 0.06, 0);
-    playTone(1250, 'square', 0.08, 0.07);
-  } else if (sound === 'win') {
-    playTone(523.25, 'square', 0.12, 0);
-    playTone(659.25, 'square', 0.12, 0.12);
-    playTone(783.99, 'square', 0.12, 0.24);
-    playTone(1046.5, 'square', 0.35, 0.36);
+  if (sound === 'tag') { playTone(180, 'sawtooth', 0.12, 0, 60); playTone(520, 'square', 0.18, 0.08, 380); }
+  else if (sound === 'roundstart') { playTone(440, 'square', 0.15, 0); playTone(440, 'square', 0.15, 0.25); playTone(440, 'square', 0.15, 0.5); playTone(880, 'sawtooth', 0.4, 0.75); }
+  else if (sound === 'monke') { playTone(320, 'triangle', 0.14, 0, 480); playTone(340, 'triangle', 0.14, 0.18, 500); playTone(620, 'sawtooth', 0.28, 0.36, 260); }
+  else if (sound === 'lava') { playTone(95, 'sawtooth', 0.5, 0, 45); playTone(1200, 'square', 0.25, 0.1, 300); }
+  else if (sound === 'computer') { playTone(950, 'square', 0.06, 0); playTone(1250, 'square', 0.08, 0.07); }
+  else if (sound === 'win') { playTone(523.25, 'square', 0.12, 0); playTone(659.25, 'square', 0.12, 0.12); playTone(783.99, 'square', 0.12, 0.24); playTone(1046.5, 'square', 0.35, 0.36); }
+  else if (sound === 'banshee') {
+    if (!isElementLoggedIn()) return triggerModToast("ELEMENT LOCKED", "SIGN IN TO ELEMENT FOR VIP SOUNDS!");
+    playTone(900, 'sawtooth', 0.4, 0, 1450, 0.25); playTone(1450, 'sawtooth', 0.4, 0.4, 300, 0.25);
+  } else if (sound === 'airhorn') {
+    if (!isElementLoggedIn()) return triggerModToast("ELEMENT LOCKED", "SIGN IN TO ELEMENT FOR VIP SOUNDS!");
+    playTone(480, 'sawtooth', 0.12, 0, null, 0.26); playTone(480, 'sawtooth', 0.12, 0.16, null, 0.26); playTone(480, 'sawtooth', 0.45, 0.32, 465, 0.26);
+  } else if (sound === 'shinyrock') {
+    if (!isElementLoggedIn()) return triggerModToast("ELEMENT LOCKED", "SIGN IN TO ELEMENT FOR VIP SOUNDS!");
+    playTone(1174.66, 'sine', 0.15, 0, null, 0.24); playTone(1567.98, 'sine', 0.35, 0.12, null, 0.24);
   }
 }
+window.STUMP_RANDOM_ROOM = "#stump-network-random:matrix.org";
 
-// --- MOD STATE & LABELS ---
+function isElementLoggedIn() {
+  return Boolean(localStorage.getItem("gtag_mx_token") || window.isMatrixConnected);
+}
+
 const DEFAULT_MOD_CONFIG = {
-  fov: 1.0,
-  sat: 100,
-  bright: 100,
-  leaderboard: true,
-  termsfx: true,
-  nightvision: false,
-  crt: false,
-  crosshair: false,
-  fps: false,
-  rainbow: false,
-  deepfried: false,
-  invert: false,
-  retro: false,
-  vignette: false,
-  cinematic: false
+  fov: 1.0, sat: 100, bright: 100, contrast: 100, gameVol: 100, menuVol: 100,
+  leaderboard: true, termsfx: true, nightvision: false, crt: false, crosshair: false,
+  fps: false, rainbow: false, deepfried: false, invert: false, retro: false,
+  vignette: false, cinematic: false, lavavision: false, blueprint: false,
+  speedlines: false, sessionclock: false, keystrokes: false, mirrorview: false,
+  rgbcrosshair: false, goldenui: false, chatnotify: false, vhsglitch: false,
+  ultrafov: false, stumpbeacon: false
 };
 
 const MOD_LABELS = {
-  leaderboard: "LEADERBOARD",
-  termsfx: "TERMINAL SFX",
-  nightvision: "NIGHT VISION",
-  crt: "CRT SCANLINES",
-  crosshair: "CROSSHAIR",
-  fps: "FPS COUNTER",
-  rainbow: "RGB MONKE",
-  deepfried: "DEEP FRIED",
-  invert: "X-RAY INVERT",
-  retro: "GAMEBOY MODE",
-  vignette: "TUNNEL VISION",
-  cinematic: "CINEMATIC BARS"
+  leaderboard: "LEADERBOARD", termsfx: "TERMINAL SFX", nightvision: "NIGHT VISION",
+  crt: "CRT SCANLINES", crosshair: "CROSSHAIR", fps: "FPS COUNTER",
+  rainbow: "RGB MONKE", deepfried: "DEEP FRIED", invert: "X-RAY INVERT",
+  retro: "GAMEBOY MODE", vignette: "TUNNEL VISION", cinematic: "CINEMATIC BARS",
+  lavavision: "LAVA VISION", blueprint: "BLUEPRINT WIRE", speedlines: "SPEED LINES",
+  sessionclock: "SESSION CLOCK", keystrokes: "KEYSTROKE HUD", mirrorview: "MIRROR WORLD",
+  rgbcrosshair: "[★] RGB RETICLE", goldenui: "[★] GOLD TERMINAL", chatnotify: "[★] CHAT PING SFX",
+  vhsglitch: "[★] VHS TRACKING", ultrafov: "[★] QUAKE PRO FOV", stumpbeacon: "[★] RANDOM ROOM PING"
 };
 
+const ELEMENT_EXCLUSIVE_MODS = new Set([
+  "rgbcrosshair", "goldenui", "chatnotify", "vhsglitch", "ultrafov", "stumpbeacon"
+]);
+
 let modConfig = { ...DEFAULT_MOD_CONFIG };
-let fpsInterval = null;
-let rainbowInterval = null;
-let rainbowHue = 0;
-let frameCount = 0;
+let fpsInterval = null, rainbowInterval = null, rainbowHue = 0, frameCount = 0;
+let sessionStartTime = Date.now();
 
 function triggerModToast(title, text) {
   const toast = document.getElementById("gtag-toast");
   const toastTitle = document.getElementById("gtag-toast-title");
   const toastBody = document.getElementById("gtag-toast-body");
   if (!toast || !toastTitle || !toastBody) return;
-
   toastTitle.textContent = title;
   toastBody.textContent = text;
   toast.classList.remove("gtag-hidden");
   playTerminalSfx("click");
-
   clearTimeout(window.gtagModToastTimer);
-  window.gtagModToastTimer = setTimeout(() => {
-    toast.classList.add("gtag-hidden");
-  }, 3000);
+  window.gtagModToastTimer = setTimeout(() => toast.classList.add("gtag-hidden"), 3000);
 }
 
 function applyVisualFilters() {
   const canvas = document.getElementById("unity-canvas");
   if (!canvas) return;
-
-  canvas.style.transform = `scale(${modConfig.fov})`;
+  const activeFov = modConfig.ultrafov ? Math.max(modConfig.fov, 1.35) : modConfig.fov;
+  const scaleX = modConfig.mirrorview ? -activeFov : activeFov;
+  canvas.style.transform = `scale(${scaleX}, ${activeFov})`;
   canvas.style.transformOrigin = "center center";
 
-  const filters = [];
-  filters.push(`brightness(${modConfig.bright}%)`);
-  filters.push(`saturate(${modConfig.sat}%)`);
-
-  if (modConfig.nightvision) {
-    filters.push("brightness(1.6) contrast(1.3) sepia(1) hue-rotate(70deg) saturate(3)");
-  }
-  if (modConfig.deepfried) {
-    filters.push("contrast(260%) saturate(350%) brightness(115%)");
-  }
-  if (modConfig.invert) {
-    filters.push("invert(100%)");
-  }
-  if (modConfig.retro) {
-    filters.push("grayscale(100%) sepia(100%) hue-rotate(55deg) contrast(160%)");
-  }
-  if (modConfig.rainbow) {
-    filters.push(`hue-rotate(${rainbowHue}deg)`);
-  }
+  const filters = [
+    `brightness(${modConfig.bright}%)`,
+    `saturate(${modConfig.sat}%)`,
+    `contrast(${modConfig.contrast}%)`
+  ];
+  if (modConfig.nightvision) filters.push("brightness(1.6) contrast(1.3) sepia(1) hue-rotate(70deg) saturate(3)");
+  if (modConfig.lavavision) filters.push("sepia(1) hue-rotate(-35deg) saturate(450%) contrast(140%)");
+  if (modConfig.blueprint) filters.push("invert(1) sepia(1) hue-rotate(180deg) saturate(400%) contrast(150%)");
+  if (modConfig.deepfried) filters.push("contrast(260%) saturate(350%) brightness(115%)");
+  if (modConfig.invert) filters.push("invert(100%)");
+  if (modConfig.retro) filters.push("grayscale(100%) sepia(100%) hue-rotate(55deg) contrast(160%)");
+  if (modConfig.vhsglitch) filters.push("contrast(135%) saturate(160%) drop-shadow(3px 0px 0px rgba(255,0,80,0.6))");
+  if (modConfig.rainbow) filters.push(`hue-rotate(${rainbowHue}deg)`);
 
   canvas.style.filter = filters.join(" ");
+  const crosshair = document.getElementById("gtag-crosshair");
+  if (crosshair) crosshair.style.color = modConfig.rgbcrosshair ? `hsl(${rainbowHue}, 100%, 55%)` : "#33ff33";
 }
-
 function syncModUI() {
-  const fovSlider = document.getElementById("slider-fov");
-  const satSlider = document.getElementById("slider-sat");
-  const brightSlider = document.getElementById("slider-bright");
+  const sliders = [
+    { id: "slider-fov", valId: "val-fov", key: "fov", fmt: v => `${Number(v).toFixed(2)}x` },
+    { id: "slider-sat", valId: "val-sat", key: "sat", fmt: v => `${v}%` },
+    { id: "slider-bright", valId: "val-bright", key: "bright", fmt: v => `${v}%` },
+    { id: "slider-contrast", valId: "val-contrast", key: "contrast", fmt: v => `${v}%` },
+    { id: "slider-gamevol", valId: "val-gamevol", key: "gameVol", fmt: v => `${v}%` },
+    { id: "slider-menuvol", valId: "val-menuvol", key: "menuVol", fmt: v => `${v}%` }
+  ];
+  sliders.forEach(s => {
+    const el = document.getElementById(s.id);
+    const lbl = document.getElementById(s.valId);
+    if (el) el.value = modConfig[s.key];
+    if (lbl) lbl.textContent = s.fmt(modConfig[s.key]);
+  });
 
-  if (fovSlider) {
-    fovSlider.value = modConfig.fov;
-    document.getElementById("val-fov").textContent = `${Number(modConfig.fov).toFixed(2)}x`;
-  }
-  if (satSlider) {
-    satSlider.value = modConfig.sat;
-    document.getElementById("val-sat").textContent = `${modConfig.sat}%`;
-  }
-  if (brightSlider) {
-    brightSlider.value = modConfig.bright;
-    document.getElementById("val-bright").textContent = `${modConfig.bright}%`;
-  }
-
+  const loggedIn = isElementLoggedIn();
   Object.keys(MOD_LABELS).forEach(key => {
     const btn = document.getElementById(`mod-${key}`);
     if (btn) {
-      btn.textContent = `${MOD_LABELS[key]}: ${modConfig[key] ? "ON" : "OFF"}`;
-      btn.classList.toggle("active", modConfig[key]);
+      const isLocked = ELEMENT_EXCLUSIVE_MODS.has(key) && !loggedIn;
+      if (isLocked && modConfig[key]) modConfig[key] = false;
+      btn.textContent = isLocked ? `${MOD_LABELS[key]}: LOCKED` : `${MOD_LABELS[key]}: ${modConfig[key] ? "ON" : "OFF"}`;
+      btn.classList.toggle("active", modConfig[key] && !isLocked);
+      btn.classList.toggle("element-locked", isLocked);
     }
   });
 
   document.getElementById("gtag-leaderboard")?.classList.toggle("gtag-hidden", !modConfig.leaderboard);
   document.getElementById("crt-overlay")?.classList.toggle("gtag-hidden", !modConfig.crt);
-  document.getElementById("gtag-crosshair")?.classList.toggle("gtag-hidden", !modConfig.crosshair);
+  document.getElementById("gtag-crosshair")?.classList.toggle("gtag-hidden", !(modConfig.crosshair || modConfig.rgbcrosshair));
   document.getElementById("gtag-vignette")?.classList.toggle("gtag-hidden", !modConfig.vignette);
   document.getElementById("gtag-cinematic")?.classList.toggle("gtag-hidden", !modConfig.cinematic);
+  document.getElementById("gtag-speedlines")?.classList.toggle("gtag-hidden", !modConfig.speedlines);
+  document.getElementById("gtag-keystrokes")?.classList.toggle("gtag-hidden", !modConfig.keystrokes);
+  document.querySelector(".gtag-terminal")?.classList.toggle("golden-theme", Boolean(modConfig.goldenui && loggedIn));
+
+  const aboutStatus = document.getElementById("about-account-status");
+  if (aboutStatus) {
+    aboutStatus.textContent = loggedIn ? `VIP ACTIVE (${localStorage.getItem("gtag_mx_user") || "ELEMENT"})` : "GUEST (SIGN IN FOR VIP PERKS)";
+  }
 
   clearInterval(rainbowInterval);
-  if (modConfig.rainbow) {
-    rainbowInterval = setInterval(() => {
-      rainbowHue = (rainbowHue + 10) % 360;
-      applyVisualFilters();
-    }, 60);
+  if (modConfig.rainbow || modConfig.rgbcrosshair) {
+    rainbowInterval = setInterval(() => { rainbowHue = (rainbowHue + 10) % 360; applyVisualFilters(); }, 60);
   }
 
   clearInterval(fpsInterval);
   const hud = document.getElementById("gtag-hud-hint");
-  if (modConfig.fps && hud) {
-    const countFrames = () => {
-      frameCount++;
-      if (modConfig.fps) requestAnimationFrame(countFrames);
-    };
-    requestAnimationFrame(countFrames);
+  const binds = window.getGtagKeybinds ? window.getGtagKeybinds() : { toggle: "Tab", chat: "t", sounds: "b" };
+  const bindHint = `[${binds.toggle.toUpperCase()}] TERM | [${binds.chat.toUpperCase()}] CHAT | [${binds.sounds.toUpperCase()}] SFX`;
+
+  if ((modConfig.fps || modConfig.sessionclock) && hud) {
+    if (modConfig.fps) {
+      const countFrames = () => { frameCount++; if (modConfig.fps) requestAnimationFrame(countFrames); };
+      requestAnimationFrame(countFrames);
+    }
     fpsInterval = setInterval(() => {
-      hud.textContent = `FPS: ${frameCount} | [TAB] TERMINAL | [T] CHAT | [B] SOUNDS`;
-      frameCount = 0;
+      const parts = [];
+      if (modConfig.fps) { parts.push(`FPS: ${frameCount}`); frameCount = 0; }
+      if (modConfig.sessionclock) {
+        const secs = Math.floor((Date.now() - sessionStartTime) / 1000);
+        parts.push(`TIME: ${String(Math.floor(secs / 60)).padStart(2, "0")}:${String(secs % 60).padStart(2, "0")}`);
+      }
+      parts.push(bindHint);
+      hud.textContent = parts.join(" | ");
     }, 1000);
   } else if (hud) {
-    hud.textContent = `[TAB] TERMINAL | [T] CHAT | [B] SOUNDS`;
+    hud.textContent = bindHint;
   }
 
+  applyAudioVolumes();
   applyVisualFilters();
 }
 
-window.updateSliderMod = function(type, val) {
-  modConfig[type] = parseFloat(val);
-  syncModUI();
-};
-
+window.updateSliderMod = function(type, val) { modConfig[type] = parseFloat(val); syncModUI(); };
 window.toggleMod = function(mod) {
+  if (ELEMENT_EXCLUSIVE_MODS.has(mod) && !isElementLoggedIn()) {
+    playTerminalSfx("error");
+    return triggerModToast("ELEMENT ACCOUNT REQUIRED", `SIGN IN TO ELEMENT TO UNLOCK ${MOD_LABELS[mod]}!`);
+  }
   modConfig[mod] = !modConfig[mod];
   syncModUI();
+  if (ELEMENT_EXCLUSIVE_MODS.has(mod) && modConfig[mod]) playTerminalSfx("vip");
   triggerModToast("GORILLA OS MOD", `${MOD_LABELS[mod]}: ${modConfig[mod] ? "ENABLED" : "DISABLED"}`);
 };
 
 window.saveModConfig = function() {
   localStorage.setItem("gtag_saved_mods", JSON.stringify(modConfig));
-  triggerModToast("CONFIG SAVED", "YOUR MODS & SLIDERS WILL AUTO-LOAD NEXT SESSION!");
+  triggerModToast("CONFIG SAVED", "YOUR MODS & VOLUME LEVELS WILL AUTO-LOAD NEXT SESSION!");
 };
-
 window.resetAllMods = function() {
   modConfig = { ...DEFAULT_MOD_CONFIG };
   localStorage.removeItem("gtag_saved_mods");
   syncModUI();
   triggerModToast("MODS RESET", "ALL MODS & SLIDERS RESTORED TO DEFAULT.");
 };
-
 window.clearUnityCosmetics = function() {
-  Object.keys(localStorage).forEach(key => {
-    if (!key.startsWith("gtag_")) {
-      localStorage.removeItem(key);
-    }
-  });
-
+  Object.keys(localStorage).forEach(k => { if (!k.startsWith("gtag_")) localStorage.removeItem(k); });
   if (window.indexedDB && indexedDB.databases) {
-    indexedDB.databases().then(dbs => {
-      dbs.forEach(db => {
-        if (db.name && db.name.includes("idbfs")) {
-          indexedDB.deleteDatabase(db.name);
-        }
-      });
-    });
-  } else {
-    indexedDB.deleteDatabase("/idbfs");
-  }
-
+    indexedDB.databases().then(dbs => dbs.forEach(db => { if (db.name?.includes("idbfs")) indexedDB.deleteDatabase(db.name); }));
+  } else { indexedDB.deleteDatabase("/idbfs"); }
   triggerModToast("COSMETICS WIPED", "RELOADING GAME...");
   setTimeout(() => window.location.reload(), 1200);
 };
 
+window.addEventListener("keydown", e => document.querySelector(`#gtag-keystrokes [data-key="${e.key.toUpperCase()}"]`)?.classList.add("pressed"));
+window.addEventListener("keyup", e => document.querySelector(`#gtag-keystrokes [data-key="${e.key.toUpperCase()}"]`)?.classList.remove("pressed"));
 document.addEventListener("DOMContentLoaded", () => {
   const saved = localStorage.getItem("gtag_saved_mods");
-  if (saved) {
-    try {
-      modConfig = { ...DEFAULT_MOD_CONFIG, ...JSON.parse(saved) };
-    } catch (_) {}
-  }
+  if (saved) { try { modConfig = { ...DEFAULT_MOD_CONFIG, ...JSON.parse(saved) }; } catch (_) {} }
   syncModUI();
 });
