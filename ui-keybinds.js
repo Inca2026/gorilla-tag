@@ -18,9 +18,7 @@ function updateKeybindUI() {
   ['toggle', 'chat', 'sounds'].forEach(action => {
     const btn = document.getElementById(`bind-btn-${action}`);
     if (btn) {
-      btn.textContent = listeningForBind === action
-        ? 'PRESS ANY KEY...'
-        : `[${keybinds[action].toUpperCase()}]`;
+      btn.textContent = listeningForBind === action ? 'PRESS ANY KEY...' : `[${keybinds[action].toUpperCase()}]`;
       btn.classList.toggle('active', listeningForBind === action);
     }
   });
@@ -38,12 +36,9 @@ window.resetKeybinds = function() {
   listeningForBind = null;
   localStorage.removeItem('gtag_keybinds');
   updateKeybindUI();
-  if (typeof triggerModToast === 'function') {
-    triggerModToast('KEYBINDS RESET', 'RESTORED [TAB], [T], AND [B].');
-  }
+  if (typeof triggerModToast === 'function') triggerModToast('KEYBINDS RESET', 'RESTORED [TAB], [T], AND [B].');
 };
 
-// --- DRAGGABLE HUD MODULES ENGINE ---
 const DRAGGABLE_IDS = ['gtag-keystrokes', 'gtag-leaderboard', 'gtag-hud-hint'];
 
 function loadSavedHudPositions() {
@@ -95,13 +90,8 @@ window.toggleHudEditMode = function(forceState = null) {
 
 window.resetHudPositions = function() {
   localStorage.removeItem('gtag_hud_positions');
-  DRAGGABLE_IDS.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.style.cssText = '';
-  });
-  if (typeof triggerModToast === 'function') {
-    triggerModToast('HUD RESET', 'ALL HUD MODULES RETURNED TO DEFAULT CORNERS.');
-  }
+  DRAGGABLE_IDS.forEach(id => { const el = document.getElementById(id); if (el) el.style.cssText = ''; });
+  if (typeof triggerModToast === 'function') triggerModToast('HUD RESET', 'ALL HUD MODULES RETURNED TO DEFAULT CORNERS.');
 };
 function initDraggableModules() {
   loadSavedHudPositions();
@@ -114,12 +104,9 @@ function initDraggableModules() {
       if (!isEditingHud) return;
       dragging = true;
       const rect = el.getBoundingClientRect();
-      startX = e.clientX;
-      startY = e.clientY;
-      origLeft = rect.left;
-      origTop = rect.top;
-      el.style.right = 'auto';
-      el.style.bottom = 'auto';
+      startX = e.clientX; startY = e.clientY;
+      origLeft = rect.left; origTop = rect.top;
+      el.style.right = 'auto'; el.style.bottom = 'auto';
       e.preventDefault();
     });
 
@@ -174,7 +161,7 @@ function focusActiveChatField() {
 }
 
 function switchTab(tabName) {
-  ['chat', 'sounds', 'mods', 'settings', 'about'].forEach(t => {
+  ['chat', 'sounds', 'mods', 'vip', 'settings', 'about'].forEach(t => {
     document.getElementById(`tab-${t}`)?.classList.toggle('gtag-hidden', tabName !== t);
     document.getElementById(`btn-tab-${t}`)?.classList.toggle('active', tabName === t);
   });
@@ -185,8 +172,7 @@ function switchTab(tabName) {
 
 window.addEventListener('keydown', (e) => {
   if (listeningForBind) {
-    e.preventDefault();
-    e.stopImmediatePropagation();
+    e.preventDefault(); e.stopImmediatePropagation();
     if (e.key !== 'Escape') {
       keybinds[listeningForBind] = e.key;
       localStorage.setItem('gtag_keybinds', JSON.stringify(keybinds));
@@ -197,19 +183,13 @@ window.addEventListener('keydown', (e) => {
   }
 
   if (e.key.toLowerCase() === keybinds.toggle.toLowerCase()) {
-    e.preventDefault();
-    e.stopImmediatePropagation();
+    e.preventDefault(); e.stopImmediatePropagation();
     toggleOverlay();
     return;
   }
 
   if (isTerminalOpen()) {
-    if (e.key === 'Escape') {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      toggleOverlay(false);
-      return;
-    }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); toggleOverlay(false); return; }
     if (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter') {
       if (document.activeElement === chatInput) {
         e.preventDefault(); e.stopImmediatePropagation();
@@ -228,13 +208,8 @@ window.addEventListener('keydown', (e) => {
       if (soundMap[e.key]) { e.preventDefault(); playMonkeSound(soundMap[e.key]); }
     }
   } else if (!isEditingHud) {
-    if (e.key.toLowerCase() === keybinds.chat.toLowerCase()) {
-      e.preventDefault(); e.stopImmediatePropagation();
-      toggleOverlay(true, 'chat');
-    } else if (e.key.toLowerCase() === keybinds.sounds.toLowerCase()) {
-      e.preventDefault(); e.stopImmediatePropagation();
-      toggleOverlay(true, 'sounds');
-    }
+    if (e.key.toLowerCase() === keybinds.chat.toLowerCase()) { e.preventDefault(); e.stopImmediatePropagation(); toggleOverlay(true, 'chat'); }
+    else if (e.key.toLowerCase() === keybinds.sounds.toLowerCase()) { e.preventDefault(); e.stopImmediatePropagation(); toggleOverlay(true, 'sounds'); }
   }
 }, true);
 
