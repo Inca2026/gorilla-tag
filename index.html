@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <title>Gorilla Tag Web</title>
   <link href="https://googleapis.com" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=120">
+  <link rel="stylesheet" href="style.css?v=130">
 </head>
 <body>
 
@@ -51,7 +51,7 @@
   <div id="gtag-overlay" class="gtag-hidden">
     <div class="gtag-terminal">
       <div class="gtag-header">
-        <span>GORILLA OS v6.0 // [TAB] CLOSE</span>
+        <span>GORILLA OS v6.5 // [TAB] CLOSE</span>
         <div>
           <button id="btn-tab-chat" class="gtag-btn active" type="button" onclick="switchTab('chat')">CHAT</button>
           <button id="btn-tab-sounds" class="gtag-btn" type="button" onclick="switchTab('sounds')">SOUNDS</button>
@@ -59,7 +59,7 @@
         </div>
       </div>
 
-      <!-- Messaging & VC Interface (Stump Network Only) -->
+      <!-- Messaging & Custom Voice Interface (Stump Network Only) -->
       <div id="tab-chat">
         <!-- Element Sign-In Form -->
         <div id="matrix-login-box" style="padding: 12px 0;">
@@ -92,11 +92,11 @@
           </div>
 
           <div class="gtag-chat-layout">
-            <!-- Left Channel Selector Sidebar (Stump Network Only) -->
+            <!-- Left Channel Selector Sidebar (#general and #vc) -->
             <div class="gtag-room-sidebar">
               <div class="gtag-sidebar-head">
                 <span>STUMP NET</span>
-                <button id="btn-add-room" type="button" title="Add Stump Channel">+</button>
+                <button id="btn-add-room" type="button" title="Add Custom Channel">+</button>
               </div>
               <div id="room-sidebar-list"></div>
             </div>
@@ -113,19 +113,34 @@
               </div>
             </div>
 
-            <!-- Right Voice Chat Panel (Shown when #vc is selected in sidebar) -->
+            <!-- Right Custom Gorilla OS Voice Relay Panel (#vc) -->
             <div id="stump-vc-panel" class="gtag-chat-main gtag-hidden">
-              <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; font-size:7px; color:#ffaa00;">
-                <span>VOICE: #STUMP-NETWORK-VC</span>
-                <div style="display:flex; gap:6px;">
-                  <button id="btn-vc-disconnect" class="gtag-btn" type="button" style="font-size:7px; padding:2px 5px;">LEAVE VC</button>
-                  <a href="https://element.io" target="_blank" style="color:#33ff33; text-decoration:none; align-self:center;">[POPOUT]</a>
+              <div class="gtag-vc-box">
+                <div class="gtag-vc-status-bar">
+                  <span id="vc-status-text">VOICE RELAY: DISCONNECTED</span>
+                  <span id="vc-peer-count">0 IN VC</span>
+                </div>
+
+                <!-- Live Voice Participants List -->
+                <div id="vc-users-list" class="gtag-vc-users">
+                  <div style="color:#888;">NO ONE IN VOICE CHANNEL YET.</div>
+                </div>
+
+                <!-- Live Mic Input Level Meter -->
+                <div class="gtag-vc-meter-wrap">
+                  <span style="font-size:7px;">MIC LEVEL:</span>
+                  <div class="gtag-vc-meter-outer">
+                    <div id="vc-mic-bar"></div>
+                  </div>
+                </div>
+
+                <!-- Voice Controls -->
+                <div class="gtag-vc-controls">
+                  <button id="btn-vc-join" class="gtag-btn" type="button">JOIN VOICE</button>
+                  <button id="btn-vc-mute" class="gtag-btn" type="button" disabled>MUTE: OFF</button>
+                  <button id="btn-vc-leave" class="gtag-btn" type="button" disabled>LEAVE</button>
                 </div>
               </div>
-              <iframe id="vc-frame" width="100%" height="232" frameborder="0"
-                allow="microphone; camera; autoplay; display-capture; fullscreen"
-                style="border:2px solid #33ff33; background:#000;">
-              </iframe>
             </div>
           </div>
         </div>
@@ -148,7 +163,7 @@
       <!-- Visual & HUD Mods Tab -->
       <div id="tab-mods" class="gtag-hidden">
         <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-          <span style="font-size:8px; color:#888;">GORILLA OS MOD MENU v6.0</span>
+          <span style="font-size:8px; color:#888;">GORILLA OS MOD MENU v6.5</span>
           <div style="display:flex; gap:6px;">
             <button id="btn-save-mods" class="gtag-btn" type="button" style="font-size:7px; padding:4px 6px;" onclick="saveModConfig()">SAVE CONFIG</button>
             <button id="btn-reset-mods" class="gtag-btn" type="button" style="font-size:7px; padding:4px 6px;" onclick="resetAllMods()">RESET</button>
@@ -193,9 +208,9 @@
   </div>
 
   <!-- Separate Modular Scripts -->
-  <script src="ui-keybinds.js?v=120"></script>
-  <script src="soundboard.js?v=120"></script>
-  <script src="chat.js?v=120"></script>
+  <script src="ui-keybinds.js?v=130"></script>
+  <script src="soundboard.js?v=130"></script>
+  <script src="chat.js?v=130"></script>
 
   <!-- Unity 8-Part Loader -->
   <script>
