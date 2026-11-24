@@ -11,6 +11,7 @@ function toggleOverlay(forceOpen = null, tab = null) {
 
   if (shouldOpen) {
     overlay.classList.remove('gtag-hidden');
+    if (typeof playTerminalSfx === 'function') playTerminalSfx('open');
     if (document.pointerLockElement) {
       document.exitPointerLock();
     }
@@ -18,6 +19,7 @@ function toggleOverlay(forceOpen = null, tab = null) {
     else focusActiveChatField();
   } else {
     overlay.classList.add('gtag-hidden');
+    if (typeof playTerminalSfx === 'function') playTerminalSfx('close');
     document.activeElement?.blur();
     unityCanvas.focus();
     if (unityCanvas.requestPointerLock) {
@@ -28,18 +30,20 @@ function toggleOverlay(forceOpen = null, tab = null) {
 
 function focusActiveChatField() {
   const chatBox = document.getElementById('matrix-chat-box');
-  if (!chatBox.classList.contains('gtag-hidden')) {
+  const textPanel = document.getElementById('stump-text-panel');
+  if (!chatBox.classList.contains('gtag-hidden') && !textPanel.classList.contains('gtag-hidden')) {
     setTimeout(() => chatInput.focus(), 15);
-  } else {
+  } else if (chatBox.classList.contains('gtag-hidden')) {
     setTimeout(() => document.getElementById('matrix-user-input').focus(), 15);
   }
 }
 
 function switchTab(tabName) {
   ['chat', 'sounds', 'mods'].forEach(t => {
-    document.getElementById(`tab-${t}`).classList.toggle('gtag-hidden', tabName !== t);
-    document.getElementById(`btn-tab-${t}`).classList.toggle('active', tabName === t);
+    document.getElementById(`tab-${t}`)?.classList.toggle('gtag-hidden', tabName !== t);
+    document.getElementById(`btn-tab-${t}`)?.classList.toggle('active', tabName === t);
   });
+  if (typeof playTerminalSfx === 'function') playTerminalSfx('tab');
   if (tabName === 'chat') focusActiveChatField();
 }
 
@@ -59,7 +63,6 @@ window.addEventListener('keydown', (e) => {
       return;
     }
 
-    // Handle Enter key inside chat or login BEFORE stopping propagation
     if (e.key === 'Enter' || e.code === 'Enter' || e.code === 'NumpadEnter') {
       if (document.activeElement === chatInput) {
         e.preventDefault();
@@ -79,10 +82,8 @@ window.addEventListener('keydown', (e) => {
       }
     }
 
-    // Prevent Unity from capturing other keys while terminal is open
     e.stopImmediatePropagation();
 
-    // If Soundboard tab is open, keys 1-6 trigger sounds
     if (!document.getElementById('tab-sounds').classList.contains('gtag-hidden')) {
       const soundMap = { '1': 'tag', '2': 'roundstart', '3': 'monke', '4': 'lava', '5': 'computer', '6': 'win' };
       if (soundMap[e.key]) {
