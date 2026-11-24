@@ -1,7 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
   const GENERAL_ALIAS = "#stump-network-general:matrix.org";
-  const RANDOM_ALIAS = "#stump-network-random:matrix.org"; // Silent backend presence & ping room
+  const RANDOM_ALIAS = "#stump-network-random:matrix.org";
   const FALLBACK_SERVER = "https://matrix.org";
+  const GUEST_RELAY_WS = "wss://://socketsbay.com";
 
   const loginBox = document.getElementById("matrix-login-box");
   const chatBox = document.getElementById("matrix-chat-box");
@@ -20,16 +21,16 @@ document.addEventListener("DOMContentLoaded", () => {
   let backendRandomRoomId = "";
   let activeChannelKey = "general";
 
-  let guestToken = sessionStorage.getItem("gtag_lb_guest_token") || "";
-  let guestUserId = sessionStorage.getItem("gtag_lb_guest_user") || "";
-  let isGuestMode = false;
+  let guestName = sessionStorage.getItem("gtag_guest_nick") || "";
+  let isGuestMode = Boolean(!accessToken && guestName);
+  let guestSocket = null;
 
   let syncToken = "";
   let isSyncing = false;
   let sidebarRooms = [];
   let toastTimeout = null;
+  let flareTimeout = null;
 
-  // Only full Element accounts unlock VIP features (guests do NOT set isMatrixConnected = true)
   window.isMatrixConnected = Boolean(accessToken && userId);
 
   let totalPlaySeconds = parseInt(localStorage.getItem("gtag_total_playtime") || "0", 10);
@@ -43,16 +44,12 @@ document.addEventListener("DOMContentLoaded", () => {
     return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
   }
 
-  function formatDisplayName(rawMatrixId) {
-    if (!rawMatrixId) return "MONKE";
-    let clean = rawMatrixId.split(":").at(0);
+  function formatDisplayName(rawId) {
+    if (!rawId) return "MONKE";
+    let clean = rawId.split(":").at(0);
     if (clean.startsWith("@")) clean = clean.slice(1);
-    const isAllDigits = clean.length > 0 && clean.split("").every(ch => ch >= "0" && ch <= "9");
-    return isAllDigits ? `MONKE_${clean.slice(-4)}` : clean;
-  }
-
-  function isGuestName(name) {
-    return name.startsWith("MONKE_") || name === "guavin";
+    const isDigits = clean.length > 0 && clean.split("").every(ch => ch >= "0" && ch <= "9");
+    return isDigits ? `MONKE_${clean.slice(-4)}` : clean;
   }
 
   setInterval(() => {
@@ -65,7 +62,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!lbBox || !listEl || lbBox.classList.contains("gtag-hidden")) return;
 
     const now = Date.now();
-    const myName = userId ? formatDisplayName(userId) : (guestUserId ? formatDisplayName(guestUserId) : "YOU");
+    const myName = userId ? formatDisplayName(userId) : (guestName || "MONKE_GUEST");
     const entries = [{ name: myName, seconds: totalPlaySeconds, isSelf: true, isVip: Boolean(userId) }];
 
     onlinePlayers.forEach((info, name) => {
@@ -74,7 +71,7 @@ document.addEventListener("DOMContentLoaded", () => {
         name,
         seconds: info.seconds + Math.floor((now - info.lastSeen) / 1000),
         isSelf: false,
-        isVip: !isGuestName(name)
+        isVip: Boolean(info.isVip)
       });
     });
 
@@ -86,39 +83,19 @@ document.addEventListener("DOMContentLoaded", () => {
       return `<div class="${cls}"><span>#${idx + 1} ${badge}${entry.name.slice(0, 11)}</span><span>${formatPlaytime(entry.seconds)}</span></div>`;
     }).join("");
   }, 1000);
-  async function sendSilentPresence() {
-    const tok = accessToken || guestToken;
-    const uid = userId || guestUserId;
-    const srv = accessToken ? homeserver : FALLBACK_SERVER;
-    if (!tok || !uid) return;
+  function showVipFlareBanner(senderName, flareText) {
+    const banner = document.getElementById("gtag-vip-flare-banner");
+    const senderEl = document.getElementById("vip-flare-sender");
+    const msgEl = document.getElementById("vip-flare-msg");
+    if (!banner || !senderEl || !msgEl) return;
 
-    try {
-      await fetch(`${srv}/_matrix/client/v3/presence/${encodeURIComponent(uid)}/status`, {
-        method: "PUT",
-        headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ presence: "online", status_msg: `GTAG_TIME:${totalPlaySeconds}` })
-      });
-    } catch (_) {}
+    senderEl.textContent = `[★] VIP BROADCAST FROM ${senderName.toUpperCase()}`;
+    msgEl.textContent = flareText;
+    banner.classList.remove("gtag-hidden");
+    playTerminalSfx?.("vip");
 
-    // Silently ping #stump-network-random:matrix.org in the background (hidden from chat UI)
-    if (backendRandomRoomId) {
-      const txnId = `ping_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
-      try {
-        await fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/${txnId}`, {
-          method: "PUT",
-          headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
-          body: JSON.stringify({ msgtype: "m.notice", body: `[TIME:${totalPlaySeconds}]` })
-        });
-      } catch (_) {}
-    }
-  }
-
-  setInterval(sendSilentPresence, 18000);
-
-  function setStatus(msg, isError = false) {
-    if (!statusLabel) return;
-    statusLabel.style.color = isError ? "#ff4444" : "#33ff33";
-    statusLabel.textContent = msg;
+    clearTimeout(flareTimeout);
+    flareTimeout = setTimeout(() => banner.classList.add("gtag-hidden"), 6500);
   }
 
   function showGtagNotification(title, bodyText) {
@@ -126,12 +103,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const toastTitle = document.getElementById("gtag-toast-title");
     const toastBody = document.getElementById("gtag-toast-body");
     if (!toast || !toastTitle || !toastBody) return;
-
     toastTitle.textContent = title;
     toastBody.textContent = bodyText;
     toast.classList.remove("gtag-hidden");
     playTerminalSfx?.("receive");
-
     clearTimeout(toastTimeout);
     toastTimeout = setTimeout(() => toast.classList.add("gtag-hidden"), 4500);
   }
@@ -151,51 +126,92 @@ document.addEventListener("DOMContentLoaded", () => {
     msgBox.scrollTop = msgBox.scrollHeight;
   }
 
-  async function ensureGuestSession(openChatAfter = false) {
-    if (accessToken) return;
+  function connectGuestRelay() {
+    if (guestSocket && guestSocket.readyState <= 1) return;
     try {
-      if (openChatAfter && guestBtn) { guestBtn.disabled = true; guestBtn.textContent = "JOINING..."; }
-      if (!guestToken) {
-        const regRes = await fetch(`${FALLBACK_SERVER}/_matrix/client/v3/register?kind=guest`, {
-          method: "POST", headers: { "Content-Type": "application/json" }, body: "{}"
-        });
-        const regData = await regRes.json();
-        if (regData.access_token) {
-          guestToken = regData.access_token;
-          guestUserId = regData.user_id;
-          sessionStorage.setItem("gtag_lb_guest_token", guestToken);
-          sessionStorage.setItem("gtag_lb_guest_user", guestUserId);
-        }
-      }
-      if (!guestToken) throw new Error("Guest registration unavailable");
+      guestSocket = new WebSocket(GUEST_RELAY_WS);
+      guestSocket.onopen = () => broadcastGuestPacket({ type: "ping", user: guestName, sec: totalPlaySeconds });
+      guestSocket.onmessage = (evt) => {
+        try {
+          const pkt = JSON.parse(evt.data);
+          if (!pkt || pkt.app !== "GTAG_OS" || pkt.user === guestName) return;
+          if (pkt.type === "ping") {
+            onlinePlayers.set(pkt.user, { seconds: pkt.sec || 0, lastSeen: Date.now(), isVip: Boolean(pkt.isVip) });
+          } else if (pkt.type === "chat" && isGuestMode && activeChannelKey === "general") {
+            addChatLine(pkt.user, pkt.text, Boolean(pkt.isVip));
+            if (document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden")) {
+              showGtagNotification("STUMP CHAT // REPLY", `[${pkt.user}]: ${pkt.text}`);
+            }
+          } else if (pkt.type === "flare") {
+            showVipFlareBanner(pkt.user, pkt.text);
+          }
+        } catch (_) {}
+      };
+      guestSocket.onclose = () => { if (!accessToken) setTimeout(connectGuestRelay, 4000); };
+    } catch (_) {}
+  }
 
-      // Silently join #stump-network-random:matrix.org for backend player tracking
-      const rndRes = await fetch(`${FALLBACK_SERVER}/_matrix/client/v3/directory/room/${encodeURIComponent(RANDOM_ALIAS)}`, {
-        headers: { "Authorization": `Bearer ${guestToken}` }
-      });
-      const rndData = await rndRes.json();
-      if (rndData.room_id) {
-        backendRandomRoomId = rndData.room_id;
-        await fetch(`${FALLBACK_SERVER}/_matrix/client/v3/join/${encodeURIComponent(backendRandomRoomId)}`, {
-          method: "POST", headers: { "Authorization": `Bearer ${guestToken}`, "Content-Type": "application/json" }, body: "{}"
-        });
-      }
-
-      if (openChatAfter) {
-        isGuestMode = true;
-        window.isMatrixConnected = false;
-        if (typeof syncModUI === "function") syncModUI();
-        await openStumpRoom(true);
-      } else {
-        await sendSilentPresence();
-        if (!isSyncing) { isSyncing = true; startSyncLoop(); }
-      }
-    } catch (err) {
-      if (openChatAfter) setStatus(`GUEST ERROR: ${err.message}`, true);
-    } finally {
-      if (guestBtn) { guestBtn.disabled = false; guestBtn.textContent = "CONTINUE AS GUEST"; }
+  function broadcastGuestPacket(payload) {
+    if (guestSocket && guestSocket.readyState === WebSocket.OPEN) {
+      guestSocket.send(JSON.stringify({ app: "GTAG_OS", ...payload }));
     }
   }
+
+  function startGuestSession(openChatAfter = false) {
+    if (accessToken) return;
+    if (!guestName) {
+      if (openChatAfter) {
+        const picked = prompt("Enter a Guest Monke Name (or leave blank for random):", `MONKE_${Math.floor(1000 + Math.random() * 9000)}`);
+        guestName = (picked && picked.trim()) ? picked.trim().slice(0, 14) : `MONKE_${Math.floor(1000 + Math.random() * 9000)}`;
+      } else {
+        guestName = `MONKE_${Math.floor(1000 + Math.random() * 9000)}`;
+      }
+      sessionStorage.setItem("gtag_guest_nick", guestName);
+    }
+    connectGuestRelay();
+    if (openChatAfter) {
+      isGuestMode = true;
+      window.isMatrixConnected = false;
+      if (typeof syncModUI === "function") syncModUI();
+      playTerminalSfx?.("send");
+      openStumpRoom(true);
+    }
+  }
+  async function sendSilentPresence() {
+    const myNick = userId ? formatDisplayName(userId) : guestName;
+    if (myNick) {
+      broadcastGuestPacket({ type: "ping", user: myNick, sec: totalPlaySeconds, isVip: Boolean(accessToken) });
+    }
+    if (!accessToken || !userId) return;
+
+    try {
+      await fetch(`${homeserver}/_matrix/client/v3/presence/${encodeURIComponent(userId)}/status`, {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ presence: "online", status_msg: `GTAG_TIME:${totalPlaySeconds}` })
+      });
+    } catch (_) {}
+
+    if (backendRandomRoomId) {
+      const txnId = `ping_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+      try {
+        await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/${txnId}`, {
+          method: "PUT",
+          headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify({ msgtype: "m.notice", body: `[TIME:${totalPlaySeconds}]` })
+        });
+      } catch (_) {}
+    }
+  }
+
+  setInterval(sendSilentPresence, 15000);
+
+  function setStatus(msg, isError = false) {
+    if (!statusLabel) return;
+    statusLabel.style.color = isError ? "#ff4444" : "#33ff33";
+    statusLabel.textContent = msg;
+  }
+
   async function resolveHomeserver(domain) {
     try {
       const res = await fetch(`https://${domain}/.well-known/matrix/client`);
@@ -246,10 +262,9 @@ document.addEventListener("DOMContentLoaded", () => {
       const loginData = await loginRes.json();
       if (!loginRes.ok || !loginData.access_token) throw new Error(loginData.error || `Login rejected (${loginRes.status})`);
 
-      if (guestUserId) onlinePlayers.delete(formatDisplayName(guestUserId));
-      guestToken = ""; guestUserId = ""; isGuestMode = false;
-      sessionStorage.removeItem("gtag_lb_guest_token");
-      sessionStorage.removeItem("gtag_lb_guest_user");
+      if (guestName) onlinePlayers.delete(guestName);
+      guestName = ""; isGuestMode = false;
+      sessionStorage.removeItem("gtag_guest_nick");
 
       accessToken = loginData.access_token;
       userId = loginData.user_id;
@@ -260,6 +275,7 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem("gtag_mx_user", userId);
       localStorage.setItem("gtag_mx_server", homeserver);
 
+      connectGuestRelay();
       if (typeof syncModUI === "function") syncModUI();
       passField.value = "";
       setStatus("");
@@ -273,18 +289,15 @@ document.addEventListener("DOMContentLoaded", () => {
       loginBtn.textContent = "SIGN IN & JOIN";
     }
   }
-
   function renderRoomSidebar() {
     const listEl = document.getElementById("room-sidebar-list");
     if (!listEl) return;
     listEl.innerHTML = "";
-    // Only user-facing rooms are rendered here (#stump-network-random stays invisible)
     sidebarRooms.forEach((rm) => {
       const btn = document.createElement("button");
       btn.type = "button";
       btn.className = rm.name === activeChannelKey ? "gtag-room-item active" : "gtag-room-item";
       btn.textContent = `#${rm.name}`;
-      btn.title = rm.alias || rm.name;
       btn.onclick = () => { playTerminalSfx?.("tab"); selectStumpChannel(rm); };
       listEl.appendChild(btn);
     });
@@ -294,141 +307,114 @@ document.addEventListener("DOMContentLoaded", () => {
     activeChannelKey = channelObj.name;
     const label = document.getElementById("matrix-room-label");
     renderRoomSidebar();
-    const roleTag = isGuestMode ? " [GUEST]" : " [★ VIP]";
+    const roleTag = isGuestMode ? ` [${guestName}]` : " [★ VIP]";
     if (label) label.textContent = `STUMP // #${channelObj.name.toUpperCase()}${roleTag}`;
 
-    if (channelObj.id) {
+    msgBox.innerHTML = "";
+    addChatLine("SYSTEM", `CONNECTED TO #${channelObj.name.toUpperCase()}`);
+    if (channelObj.id && accessToken) {
       activeRoomId = channelObj.id;
-      if (!isGuestMode) localStorage.setItem("gtag_mx_custom_room", activeRoomId);
-      msgBox.innerHTML = "";
-      addChatLine("SYSTEM", `CONNECTED TO #${channelObj.name.toUpperCase()}`);
+      localStorage.setItem("gtag_mx_custom_room", activeRoomId);
       await loadRecentRoomHistory(activeRoomId);
-      chatInput?.focus();
-    } else {
-      msgBox.innerHTML = "";
-      addChatLine("SYSTEM", `ROOM ${channelObj.alias} UNAVAILABLE FOR GUESTS OR NOT FOUND`);
     }
+    chatInput?.focus();
   }
+
   async function loadRecentRoomHistory(rId) {
-    const tok = accessToken || guestToken;
-    const srv = accessToken ? homeserver : FALLBACK_SERVER;
+    if (!accessToken) return;
     try {
-      const res = await fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(rId)}/messages?dir=b&limit=20`, {
-        headers: { "Authorization": `Bearer ${tok}` }
+      const res = await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(rId)}/messages?dir=b&limit=20`, {
+        headers: { "Authorization": `Bearer ${accessToken}` }
       });
       if (!res.ok) return;
       const data = await res.json();
       for (const ev of (data.chunk || []).reverse()) {
-        if (ev.type === "m.room.message" && ev.content?.body) {
-          const b = ev.content.body;
-          if (b.startsWith("[TIME:") || b.startsWith("[POS:")) continue;
-          const displayName = formatDisplayName(ev.sender);
-          addChatLine(displayName, b, !isGuestName(displayName));
+        if (ev.type === "m.room.message" && ev.content?.body && !ev.content.body.startsWith("[TIME:")) {
+          addChatLine(formatDisplayName(ev.sender), ev.content.body, true);
         }
       }
     } catch (_) {}
   }
 
   async function resolveAndJoinAlias(alias) {
-    const tok = accessToken || guestToken;
-    const srv = accessToken ? homeserver : FALLBACK_SERVER;
-    const lookupRes = await fetch(`${srv}/_matrix/client/v3/directory/room/${encodeURIComponent(alias)}`, {
-      headers: { "Authorization": `Bearer ${tok}` }
+    const lookupRes = await fetch(`${homeserver}/_matrix/client/v3/directory/room/${encodeURIComponent(alias)}`, {
+      headers: { "Authorization": `Bearer ${accessToken}` }
     });
     const lookupData = await lookupRes.json();
     if (!lookupRes.ok || !lookupData.room_id) throw new Error(lookupData.error || `Room ${alias} not found`);
-    const rId = lookupData.room_id;
-    await fetch(`${srv}/_matrix/client/v3/join/${encodeURIComponent(rId)}`, {
+    await fetch(`${homeserver}/_matrix/client/v3/join/${encodeURIComponent(lookupData.room_id)}`, {
       method: "POST",
-      headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
+      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
       body: "{}"
     });
-    return rId;
-  }
-
-  async function populateStumpSidebar() {
-    sidebarRooms = [];
-    try { sidebarRooms.push({ name: "general", alias: GENERAL_ALIAS, id: await resolveAndJoinAlias(GENERAL_ALIAS) }); }
-    catch (_) { sidebarRooms.push({ name: "general", alias: GENERAL_ALIAS, id: null }); }
-    try { backendRandomRoomId = await resolveAndJoinAlias(RANDOM_ALIAS); } catch (_) {}
-    renderRoomSidebar();
+    return lookupData.room_id;
   }
 
   async function openStumpRoom(asGuest = false) {
     loginBox.classList.add("gtag-hidden");
     chatBox.classList.remove("gtag-hidden");
     msgBox.innerHTML = "";
+    sidebarRooms = [];
+
     if (asGuest) {
-      addChatLine("SYSTEM", `SIGNED IN AS GUEST (${formatDisplayName(guestUserId)})`);
-      addChatLine("SYSTEM", "SIGN IN WITH ELEMENT TO UNLOCK THE [★ VIP] TAB & MODS!");
+      sidebarRooms.push({ name: "general", alias: GENERAL_ALIAS, id: "guest-general" });
+      renderRoomSidebar();
+      addChatLine("SYSTEM", `GUEST SESSION ACTIVE: ${guestName}`);
+      addChatLine("SYSTEM", "SIGN IN WITH ELEMENT TO UNLOCK [★ VIP] & MATRIX ROOMS!");
+      await selectStumpChannel(sidebarRooms.at(0));
     } else {
       addChatLine("SYSTEM", `LOGGED IN AS ${userId} [★ VIP TAB UNLOCKED]`, true);
+      try { sidebarRooms.push({ name: "general", alias: GENERAL_ALIAS, id: await resolveAndJoinAlias(GENERAL_ALIAS) }); }
+      catch (_) { sidebarRooms.push({ name: "general", alias: GENERAL_ALIAS, id: null }); }
+      try { backendRandomRoomId = await resolveAndJoinAlias(RANDOM_ALIAS); } catch (_) {}
+      renderRoomSidebar();
+      if (sidebarRooms.at(0)) await selectStumpChannel(sidebarRooms.at(0));
+      if (!isSyncing) { isSyncing = true; startSyncLoop(); }
     }
-    await populateStumpSidebar();
-    if (sidebarRooms.at(0)) await selectStumpChannel(sidebarRooms.at(0));
     await sendSilentPresence();
-    if (!isSyncing) { isSyncing = true; startSyncLoop(); }
   }
   async function startSyncLoop() {
-    while ((accessToken || guestToken) && isSyncing) {
-      const tok = accessToken || guestToken;
-      const srv = accessToken ? homeserver : FALLBACK_SERVER;
+    while (accessToken && isSyncing) {
       try {
         const query = syncToken ? `?timeout=15000&since=${encodeURIComponent(syncToken)}` : "?timeout=15000";
-        const res = await fetch(`${srv}/_matrix/client/v3/sync${query}`, { headers: { "Authorization": `Bearer ${tok}` } });
+        const res = await fetch(`${homeserver}/_matrix/client/v3/sync${query}`, { headers: { "Authorization": `Bearer ${accessToken}` } });
         if (!res.ok) {
-          if (res.status === 401 && accessToken) { handleLogout(); return setStatus("SESSION EXPIRED.", true); }
+          if (res.status === 401) { handleLogout(); return setStatus("SESSION EXPIRED.", true); }
           await new Promise(r => setTimeout(r, 3000));
           continue;
         }
         const data = await res.json();
         const isInitialSync = !syncToken;
         if (data.next_batch) syncToken = data.next_batch;
-        const selfId = userId || guestUserId;
-
-        for (const pEv of (data.presence?.events || [])) {
-          if (pEv.type === "m.presence" && pEv.sender && pEv.sender !== selfId) {
-            const pName = formatDisplayName(pEv.sender);
-            const statusMsg = pEv.content?.status_msg || "";
-            if (pEv.content?.presence === "offline") onlinePlayers.delete(pName);
-            else if (pEv.content?.presence === "online" || statusMsg.startsWith("GTAG_")) {
-              const idx = statusMsg.indexOf(":");
-              const sec = idx !== -1 ? parseInt(statusMsg.slice(idx + 1), 10) || 0 : 0;
-              onlinePlayers.set(pName, { seconds: sec || (onlinePlayers.get(pName)?.seconds || 0), lastSeen: Date.now() });
-            }
-          }
-        }
 
         const joinedRooms = data.rooms?.join || {};
         if (backendRandomRoomId && joinedRooms[backendRandomRoomId]) {
           for (const ev of (joinedRooms[backendRandomRoomId].timeline?.events || [])) {
-            if (ev.type === "m.room.message" && ev.content?.body && ev.sender !== selfId) {
+            if (ev.type === "m.room.message" && ev.content?.body && ev.sender !== userId) {
               const displayUser = formatDisplayName(ev.sender);
               if (ev.content.body.startsWith("[TIME:")) {
                 const isNew = !onlinePlayers.has(displayUser);
-                onlinePlayers.set(displayUser, { seconds: parseInt(ev.content.body.slice(6, -1), 10) || 0, lastSeen: Date.now() });
-                if (isNew && !isInitialSync && accessToken && typeof modConfig !== "undefined" && modConfig.stumpbeacon) {
+                onlinePlayers.set(displayUser, { seconds: parseInt(ev.content.body.slice(6, -1), 10) || 0, lastSeen: Date.now(), isVip: true });
+                if (isNew && !isInitialSync && modConfig?.stumpbeacon) {
                   showGtagNotification("VIP RADAR // MONKE ONLINE", `${displayUser} JUST CAME ONLINE!`);
                 }
               } else if (ev.content.body.startsWith("[VIP_FLARE]") && !isInitialSync) {
-                showGtagNotification("★ VIP BROADCAST", `${displayUser}: ${ev.content.body.slice(11)}`);
+                showVipFlareBanner(displayUser, ev.content.body.slice(11));
               }
             }
           }
         }
 
         for (const ev of (joinedRooms[activeRoomId]?.timeline?.events || [])) {
-          if (ev.type === "m.room.message" && ev.content?.body && !ev.content.body.startsWith("[TIME:") && !ev.content.body.startsWith("[POS:")) {
+          if (ev.type === "m.room.message" && ev.content?.body && !ev.content.body.startsWith("[TIME:")) {
             const displayUser = formatDisplayName(ev.sender);
-            if (ev.sender !== selfId && !isInitialSync) {
-              onlinePlayers.set(displayUser, { seconds: onlinePlayers.get(displayUser)?.seconds || 0, lastSeen: Date.now() });
-            }
-            if ((accessToken || isGuestMode) && !isInitialSync) {
-              addChatLine(displayUser, ev.content.body, !isGuestName(displayUser));
-              const closed = document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden");
-              if (ev.sender !== selfId) {
-                if (accessToken && typeof modConfig !== "undefined" && modConfig.chatnotify) playTerminalSfx?.("vip");
-                if (closed) showGtagNotification("STUMP CHAT // REPLY", `[${displayUser}]: ${ev.content.body}`);
+            if (!isInitialSync) {
+              addChatLine(displayUser, ev.content.body, true);
+              if (ev.sender !== userId) {
+                if (modConfig?.chatnotify) playTerminalSfx?.("vip");
+                if (document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden")) {
+                  showGtagNotification("STUMP CHAT // REPLY", `[${displayUser}]: ${ev.content.body}`);
+                }
               }
             }
           }
@@ -438,37 +424,46 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function sendMessage(text) {
-    const tok = accessToken || (isGuestMode ? guestToken : "");
-    const srv = accessToken ? homeserver : FALLBACK_SERVER;
-    if (!tok || !text || !activeRoomId) return;
+    if (!text) return;
+    if (isGuestMode) {
+      addChatLine(guestName, text, false);
+      broadcastGuestPacket({ type: "chat", user: guestName, text, isVip: false });
+      playTerminalSfx?.("send");
+      return;
+    }
+    if (!accessToken || !activeRoomId) return;
+    if (activeChannelKey === "general") {
+      broadcastGuestPacket({ type: "chat", user: formatDisplayName(userId), text, isVip: true });
+    }
     const txnId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    try {
-      const res = await fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.room.message/${txnId}`, {
-        method: "PUT",
-        headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ msgtype: "m.text", body: text })
-      });
-      if (res?.ok) playTerminalSfx?.("send");
-      else { playTerminalSfx?.("error"); addChatLine("SYSTEM", `SEND ERROR: ${res?.status}`); }
-    } catch (err) { addChatLine("SYSTEM", `NETWORK ERROR: ${err.message}`); }
+    const res = await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.room.message/${txnId}`, {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "m.text", body: text })
+    });
+    if (res?.ok) playTerminalSfx?.("send");
   }
 
   window.sendVipBroadcastFlare = async function() {
-    if (!accessToken || !backendRandomRoomId) return triggerModToast("VIP ONLY", "ELEMENT ACCOUNT REQUIRED!");
-    const shout = prompt("Send a global VIP toast alert to all online monkes:");
+    if (!accessToken) return triggerModToast("VIP ONLY", "ELEMENT ACCOUNT REQUIRED!");
+    const shout = prompt("Send a top-screen VIP Flare announcement to all online monkes:");
     if (!shout?.trim()) return;
-    await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/flare_${Date.now()}`, {
-      method: "PUT",
-      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ msgtype: "m.notice", body: `[VIP_FLARE]${shout.trim().slice(0, 80)}` })
-    });
-    playTerminalSfx?.("vip");
-    triggerModToast("VIP FLARE SENT", "BROADCASTED TO ALL ONLINE PLAYERS!");
+    const cleanShout = shout.trim().slice(0, 85);
+    const myVipName = formatDisplayName(userId);
+    showVipFlareBanner(myVipName, cleanShout);
+    broadcastGuestPacket({ type: "flare", user: myVipName, text: cleanShout });
+    if (backendRandomRoomId) {
+      await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/flare_${Date.now()}`, {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ msgtype: "m.notice", body: `[VIP_FLARE]${cleanShout}` })
+      }).catch(() => {});
+    }
   };
 
   document.getElementById("btn-add-room")?.addEventListener("click", async e => {
     e.preventDefault();
-    if (!accessToken) return triggerModToast("ELEMENT REQUIRED", "GUESTS CANNOT JOIN CUSTOM ROOMS.");
+    if (!accessToken) return triggerModToast("ELEMENT REQUIRED", "GUESTS CANNOT JOIN CUSTOM MATRIX ROOMS.");
     playTerminalSfx?.("click");
     const rawAlias = prompt("Enter Stump Channel Address (e.g. #stump-network-clips:matrix.org):");
     if (!rawAlias?.trim()) return;
@@ -486,22 +481,24 @@ document.addEventListener("DOMContentLoaded", () => {
   });
 
   function handleLogout() {
-    accessToken = ""; userId = ""; syncToken = ""; isSyncing = false; isGuestMode = false; window.isMatrixConnected = false;
+    accessToken = ""; userId = ""; syncToken = ""; isSyncing = false; isGuestMode = false; guestName = ""; window.isMatrixConnected = false;
     ["gtag_mx_token", "gtag_mx_user", "gtag_mx_server", "gtag_mx_custom_room"].forEach(k => localStorage.removeItem(k));
+    sessionStorage.removeItem("gtag_guest_nick");
     if (typeof syncModUI === "function") syncModUI();
     chatBox.classList.add("gtag-hidden"); loginBox.classList.remove("gtag-hidden");
-    playTerminalSfx?.("close"); setStatus("SIGNED OUT."); ensureGuestSession(false);
+    playTerminalSfx?.("close"); setStatus("SIGNED OUT."); startGuestSession(false);
   }
 
   window.loginElementAccount = handleLogin;
   window.logoutElementAccount = handleLogout;
   window.sendStumpChatInput = () => { const msg = chatInput.value.trim(); if (msg) { chatInput.value = ""; sendMessage(msg); } };
   if (loginBtn) loginBtn.onclick = e => { e.preventDefault(); handleLogin(); };
-  if (guestBtn) guestBtn.onclick = e => { e.preventDefault(); ensureGuestSession(true); };
+  if (guestBtn) guestBtn.onclick = e => { e.preventDefault(); startGuestSession(true); };
   document.getElementById("matrix-logout-btn")?.addEventListener("click", e => { e.preventDefault(); handleLogout(); });
   document.getElementById("chat-send-btn")?.addEventListener("click", e => { e.preventDefault(); window.sendStumpChatInput(); chatInput.focus(); });
 
   setStatus("READY TO SIGN IN OR CONTINUE AS GUEST.");
-  if (accessToken && userId) openStumpRoom(false);
-  else ensureGuestSession(false);
+  if (accessToken && userId) { connectGuestRelay(); openStumpRoom(false); }
+  else if (isGuestMode) { connectGuestRelay(); openStumpRoom(true); }
+  else startGuestSession(false);
 });
