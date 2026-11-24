@@ -1,49 +1,97 @@
-const overlay = document.getElementById('gtag-overlay');
-const chatInput = document.getElementById('chat-input');
-const unityCanvas = document.getElementById('unity-canvas');
-
-function toggleOverlay(forceOpen = null, tab = null) {
-  const isHidden = overlay.classList.contains('gtag-hidden');
-  const shouldOpen = forceOpen !== null ? forceOpen : isHidden;
-
-  if (shouldOpen) {
-    overlay.classList.remove('gtag-hidden');
-    if (tab) switchTab(tab);
-    if (tab === 'chat' || !tab) setTimeout(() => chatInput.focus(), 10);
-  } else {
-    overlay.classList.add('gtag-hidden');
-    chatInput.blur();
-    unityCanvas.focus();
-  }
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body, html {
+  width: 100%; height: 100%; overflow: hidden;
+  background: #0d110d;
+  font-family: 'Press Start 2P', monospace;
 }
 
-function switchTab(tabName) {
-  document.getElementById('tab-chat').classList.toggle('gtag-hidden', tabName !== 'chat');
-  document.getElementById('tab-music').classList.toggle('gtag-hidden', tabName !== 'music');
-  document.getElementById('btn-tab-chat').classList.toggle('active', tabName === 'chat');
-  document.getElementById('btn-tab-music').classList.toggle('active', tabName === 'music');
-  if (tabName === 'chat') chatInput.focus();
+/* Fullscreen Unity Canvas */
+#unity-container { width: 100%; height: 100%; position: relative; }
+#unity-canvas { width: 100%; height: 100%; display: block; background: #111; }
+
+/* Custom Gorilla Tag Loading Screen */
+#gtag-loading {
+  position: absolute; inset: 0;
+  background: #111811;
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  color: #33ff33; z-index: 50;
+  border: 8px solid #2b2b2b;
+  text-align: center; padding: 20px;
+}
+#gtag-load-status { font-size: 11px; margin-bottom: 8px; }
+.gtag-bar-outer {
+  width: 340px; max-width: 90%; height: 24px;
+  border: 3px solid #33ff33;
+  margin-top: 12px; padding: 3px;
+}
+#gtag-bar-inner {
+  width: 0%; height: 100%;
+  background: #33ff33; transition: width 0.2s;
 }
 
-['keydown', 'keyup', 'keypress'].forEach(evtName => {
-  chatInput.addEventListener(evtName, (e) => {
-    if (e.key !== 'Tab' && e.key !== 'Escape') e.stopPropagation();
-  });
-});
+/* Keybind Hint HUD */
+#gtag-hud-hint {
+  position: fixed; bottom: 12px; left: 12px;
+  background: rgba(17, 24, 17, 0.85);
+  border: 2px solid #33ff33;
+  color: #33ff33; font-size: 9px;
+  padding: 8px 10px; z-index: 100;
+  pointer-events: none;
+}
 
-document.addEventListener('keydown', (e) => {
-  const isTyping = document.activeElement === chatInput;
-  if (e.key === 'Tab') {
-    e.preventDefault();
-    toggleOverlay();
-  } else if (e.key === 'Escape' && !overlay.classList.contains('gtag-hidden')) {
-    toggleOverlay(false);
-  } else if (!isTyping) {
-    if (e.key.toLowerCase() === 't') { e.preventDefault(); toggleOverlay(true, 'chat'); }
-    else if (e.key.toLowerCase() === 'm') { e.preventDefault(); toggleOverlay(true, 'music'); }
-    else if (!overlay.classList.contains('gtag-hidden')) {
-      if (e.key === '1') switchTab('chat');
-      if (e.key === '2') switchTab('music');
-    }
-  }
-});
+/* Gorilla OS Terminal Overlay */
+.gtag-hidden { display: none !important; }
+#gtag-overlay {
+  position: fixed; top: 50%; left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 9999; color: #33ff33;
+}
+.gtag-terminal {
+  width: 560px; max-width: 95vw;
+  background: #111811;
+  border: 6px solid #2b2b2b;
+  box-shadow: 0 0 0 4px #000, inset 0 0 25px rgba(51, 255, 51, 0.25);
+  padding: 16px;
+}
+.gtag-header {
+  display: flex; justify-content: space-between; align-items: center;
+  border-bottom: 3px solid #33ff33;
+  padding-bottom: 10px; margin-bottom: 12px;
+  font-size: 9px;
+}
+.gtag-btn {
+  background: #1d2b1d; color: #33ff33;
+  border: 2px solid #33ff33;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 9px; padding: 6px 8px;
+  cursor: pointer;
+}
+.gtag-btn:hover, .gtag-btn.active { background: #33ff33; color: #111811; }
+
+/* Chat Panel */
+#chat-messages {
+  height: 220px; overflow-y: auto;
+  font-size: 9px; line-height: 1.7;
+  margin-bottom: 12px; background: #0a0f0a;
+  padding: 10px; border: 2px solid #1f3d1f;
+  word-wrap: break-word;
+}
+.chat-line { margin-bottom: 6px; }
+.chat-user { color: #ffaa00; }
+.gtag-input-row { display: flex; align-items: center; gap: 8px; }
+#chat-input {
+  width: 100%; background: transparent;
+  border: none; border-bottom: 2px solid #33ff33;
+  color: #33ff33; font-family: 'Press Start 2P', monospace;
+  font-size: 10px; outline: none; padding: 6px 2px;
+}
+
+/* Spotify Panel */
+#tab-music { text-align: center; padding: 16px 0; }
+#track-info {
+  font-size: 10px; line-height: 1.6;
+  margin-bottom: 18px; color: #ffaa00;
+  min-height: 32px;
+}
+.gtag-btn-group { display: flex; justify-content: center; gap: 10px; }
