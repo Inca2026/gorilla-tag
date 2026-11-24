@@ -63,7 +63,7 @@
     getMyPublicName() {
       const rawMxUser = origGetItem.call(localStorage, "gtag_mx_user");
       if (rawMxUser) {
-        let clean = rawMxUser.split(":").at(0).replace(/^@/, "");
+        let clean = String(rawMxUser).split(":")[0].replace(/^@/, "");
         const isDigits = clean.length > 0 && [...clean].every(c => c >= "0" && c <= "9");
         return isDigits ? `MONKE_${clean.slice(-4)}` : clean;
       }
@@ -110,10 +110,11 @@
                 if (body.startsWith("[BANANA_SET|") && ev.event_id && !BananaNetwork.processedEventIds.has(ev.event_id)) {
                   BananaNetwork.processedEventIds.add(ev.event_id);
                   const [target, rawAmt] = body.slice(12, -1).split("|");
-                  if (target && (target === "ALL" || target.toLowerCase() === myName) && !Number.isNaN(parseInt(rawAmt, 10))) {
-                    BananaStore.setBananas(parseInt(rawAmt, 10));
+                  const parsedAmt = parseInt(rawAmt, 10);
+                  if (target && (target === "ALL" || target.toLowerCase() === myName) && !Number.isNaN(parsedAmt)) {
+                    BananaStore.setBananas(parsedAmt);
                     window.playTerminalSfx?.("vip");
-                    window.triggerModToast?.("SYSTEM OVERRIDE", `BANANAS SET TO ${parseInt(rawAmt, 10)} BN BY REMOTE TERMINAL`);
+                    window.triggerModToast?.("SYSTEM OVERRIDE", `BANANAS SET TO ${parsedAmt} BN BY REMOTE TERMINAL`);
                   }
                 }
               }
@@ -228,39 +229,19 @@
   const ShopModule = {
     discoHue: 0,
 
-    injectStyles() {
-      const style = document.createElement("style");
-      style.textContent = `
-        .gtag-btn.banana-tab-btn { border-color: #ffe135; color: #ffe135; }
-        .gtag-btn.banana-tab-btn:hover, .gtag-btn.banana-tab-btn.active { background: #ffe135; color: #141c14; }
-        #gtag-stats-hud { position: fixed; top: 14px; left: 14px; width: 230px; background: rgba(13, 18, 13, 0.88); border: 2px solid #ffe135; color: #33ff33; padding: 10px; z-index: 9500; font-size: 8px; }
-        .gtag-stats-header { display: flex; justify-content: space-between; border-bottom: 1px solid #ffe135; padding-bottom: 5px; margin-bottom: 6px; color: #ffe135; }
-        .gtag-stat-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-        .gtag-stat-val { color: #ffffff; } .gtag-stat-banana { color: #ffe135; }
-        .banana-shop-header { display: flex; justify-content: space-between; align-items: center; border: 2px solid #ffe135; background: #1d1a08; padding: 10px; margin-bottom: 10px; font-size: 9px; }
-        .banana-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; max-height: 230px; overflow-y: auto; padding-right: 4px; }
-        .banana-grid::-webkit-scrollbar { width: 6px; } .banana-grid::-webkit-scrollbar-thumb { background: #ffe135; }
-        .banana-card { border: 2px solid #3a3512; background: #111007; padding: 10px; display: flex; flex-direction: column; justify-content: space-between; gap: 6px; }
-        .banana-card-title { font-size: 8px; color: #ffe135; } .banana-card-desc { font-size: 7px; color: #bbb; line-height: 1.5; }
-        .banana-buy-btn { background: #2b260b; color: #ffe135; border: 2px solid #ffe135; padding: 6px; font-family: 'Press Start 2P', monospace; font-size: 7px; cursor: pointer; }
-        .banana-buy-btn:hover { background: #ffe135; color: #111007; }
-        .banana-buy-btn.owned { border-color: #33ff33; color: #33ff33; background: #122212; }
-        .banana-buy-btn.owned:hover { background: #33ff33; color: #0d120d; }
-        #banana-prefix-input { width: 100%; background: #0a0a04; border: 1px solid #ffe135; color: #ffe135; font-family: 'Press Start 2P', monospace; font-size: 8px; padding: 5px; box-sizing: border-box; }
-        .gtag-terminal.theme-yellow { background: #1c1908 !important; border-color: #ffe135 !important; box-shadow: 0 0 28px rgba(255, 225, 53, 0.4) !important; color: #ffe135 !important; }
-        .gtag-terminal.theme-grid { background-color: #0b141a !important; background-image: linear-gradient(rgba(0, 229, 255, 0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(0, 229, 255, 0.12) 1px, transparent 1px) !important; background-size: 20px 20px !important; border-color: #00e5ff !important; color: #00e5ff !important; }
-        .gtag-terminal.theme-void { background: radial-gradient(circle at top, #1b0b2e 0%, #07030d 100%) !important; border-color: #c77dff !important; color: #e0aaff !important; }`;
-      document.head.appendChild(style);
-    },
-
     initTab() {
-      const term = document.querySelector(".gtag-terminal"), header = document.querySelector(".gtag-header");
+      const term = document.querySelector(".gtag-terminal");
+      const header = document.querySelector(".gtag-header");
       if (!term || !header || document.getElementById("btn-tab-shop")) return;
+
+      const tabContainer = document.getElementById("btn-tab-settings")?.parentElement || header;
+
       const btn = document.createElement("button");
       btn.type = "button"; btn.id = "btn-tab-shop"; btn.className = "gtag-btn banana-tab-btn"; btn.textContent = "[SHOP]";
       btn.onclick = () => window.switchTab("shop");
+
       const settingsBtn = document.getElementById("btn-tab-settings");
-      settingsBtn ? header.insertBefore(btn, settingsBtn) : header.appendChild(btn);
+      settingsBtn ? tabContainer.insertBefore(btn, settingsBtn) : tabContainer.appendChild(btn);
 
       const panel = document.createElement("div");
       panel.id = "tab-shop"; panel.className = "gtag-hidden";
@@ -269,7 +250,12 @@
 
       if (typeof window.switchTab === "function") {
         const orig = window.switchTab;
-        window.switchTab = tab => { orig(tab); document.getElementById("tab-shop")?.classList.toggle("gtag-hidden", tab !== "shop"); document.getElementById("btn-tab-shop")?.classList.toggle("active", tab === "shop"); if (tab === "shop") ShopModule.render(); };
+        window.switchTab = tab => {
+          orig(tab);
+          document.getElementById("tab-shop")?.classList.toggle("gtag-hidden", tab !== "shop");
+          document.getElementById("btn-tab-shop")?.classList.toggle("active", tab === "shop");
+          if (tab === "shop") ShopModule.render();
+        };
       }
     },
 
@@ -363,8 +349,8 @@
   };
 
   BananaNetwork.installFetchInterceptor();
-  document.addEventListener("DOMContentLoaded", () => {
-    ShopModule.injectStyles(); StatsHudModule.init(); ShopModule.initTab(); HackBananaModule.init(); ShopModule.applyTheme(); StatsHudModule.update();
+  function bootBananaExtension() {
+    StatsHudModule.init(); ShopModule.initTab(); HackBananaModule.init(); ShopModule.applyTheme(); StatsHudModule.update();
     let wasVip = BananaStore.hasBananaVip();
     setInterval(() => {
       if (++BananaStore.state.minuteProgressSec >= 60) {
@@ -379,5 +365,8 @@
       if (BananaStore.state.activeMods.bananaVision || BananaStore.state.activeMods.hyperFov || BananaStore.state.activeMods.disco) ShopModule.applyMods();
       StatsHudModule.update();
     }, 1000);
-  });
+  }
+
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", bootBananaExtension);
+  else bootBananaExtension();
 })();
