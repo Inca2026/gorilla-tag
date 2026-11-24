@@ -1,5 +1,5 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const STUMP_ROOM_ID = "!biZ1u5bq9LjBrSDFLVhfQwS-BYDBCziaT1vKTtq_S4A:matrix.org";
+  let activeRoomId = localStorage.getItem("gtag_mx_room") || "!biZ1u5bq9LjBrSDFLVhfQwS-BYDBCziaT1vKTtq_S4A:matrix.org";
   const FALLBACK_SERVER = "https://matrix.org";
 
   const loginBox = document.getElementById("matrix-login-box");
@@ -10,11 +10,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const passField = document.getElementById("matrix-pass-input");
   const chatInput = document.getElementById("chat-input");
   const msgBox = document.getElementById("chat-messages");
-
-  if (!loginBtn || !userField || !passField) {
-    console.error("GorillaOS Chat: Missing required HTML elements.");
-    return;
-  }
 
   let accessToken = localStorage.getItem("gtag_mx_token") || "";
   let userId = localStorage.getItem("gtag_mx_user") || "";
@@ -89,16 +84,12 @@ document.addEventListener("DOMContentLoaded", () => {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: "m.login.password",
-          identifier: {
-            type: "m.id.user",
-            user: localpart
-          },
+          identifier: { type: "m.id.user", user: localpart },
           password: password
         })
       });
 
       const loginData = await loginRes.json();
-
       if (!loginRes.ok || !loginData.access_token) {
         throw new Error(loginData.error || `Login rejected (${loginRes.status})`);
       }
@@ -120,45 +111,77 @@ document.addEventListener("DOMContentLoaded", () => {
       loginBtn.textContent = "SIGN IN & JOIN";
     }
   }
+  async function findStumpRoomFromJoined() {
+    try {
+      const res = await fetch(`${homeserver}/_matrix/client/v3/joined_rooms`, {
+        headers: { "Authorization": `Bearer ${accessToken}` }
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      const rooms = data.joined_rooms || [];
+
+      for (const rId of rooms) {
+        const nameRes = await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(rId)}/state/m.room.name`, {
+          headers: { "Authorization": `Bearer ${accessToken}` }
+        });
+        if (nameRes.ok) {
+          const nameData = await nameRes.json();
+          if (nameData.name && nameData.name.toLowerCase().includes("stump")) {
+            return rId;
+          }
+        }
+      }
+      return rooms.at(0) || null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  async function joinRoomByIdOrAlias(target) {
+    const encoded = encodeURIComponent(target);
+    const joinRes = await fetch(`${homeserver}/_matrix/client/v3/join/${encoded}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: "{}"
+    });
+    const joinData = await joinRes.json();
+    if (!joinRes.ok) {
+      throw new Error(joinData.error || `HTTP ${joinRes.status}`);
+    }
+    return joinData.room_id || target;
+  }
 
   async function openStumpRoom() {
     loginBox.classList.add("gtag-hidden");
     chatBox.classList.remove("gtag-hidden");
     msgBox.innerHTML = "";
     addChatLine("SYSTEM", `LOGGED IN AS ${userId}`);
-    addChatLine("SYSTEM", "JOINING STUMP NETWORK...");
+    addChatLine("SYSTEM", "CONNECTING TO STUMP NETWORK...");
 
     try {
-      const joinUrl = `${homeserver}/_matrix/client/v3/join/${encodeURIComponent(STUMP_ROOM_ID)}?server_name=matrix.org`;
-      const joinRes = await fetch(joinUrl, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${accessToken}`,
-          "Content-Type": "application/json"
-        },
-        body: "{}"
-      });
-
-      const joinData = await joinRes.json();
-
-      if (!joinRes.ok) {
-        if (joinData.errcode === "M_UNKNOWN_TOKEN") {
-          handleLogout();
-          setStatus("SESSION EXPIRED. SIGN IN AGAIN.", true);
-          return;
-        }
-        throw new Error(joinData.error || `Join failed (${joinRes.status})`);
-      }
-
-      addChatLine("SYSTEM", "CONNECTED TO STUMP NETWORK!");
-      setTimeout(() => chatInput.focus(), 30);
-
-      if (!isSyncing) {
-        isSyncing = true;
-        startSyncLoop();
+      const detectedRoom = await findStumpRoomFromJoined();
+      if (detectedRoom) {
+        activeRoomId = detectedRoom;
+        localStorage.setItem("gtag_mx_room", activeRoomId);
+        addChatLine("SYSTEM", "FOUND & CONNECTED TO STUMP NETWORK!");
+      } else {
+        activeRoomId = await joinRoomByIdOrAlias(activeRoomId);
+        localStorage.setItem("gtag_mx_room", activeRoomId);
+        addChatLine("SYSTEM", "JOINED STUMP NETWORK!");
       }
     } catch (err) {
-      addChatLine("SYSTEM", `ROOM ERROR: ${err.message}`);
+      addChatLine("SYSTEM", `AUTO-JOIN NOTE: ${err.message}`);
+      addChatLine("SYSTEM", "TYPE /join #yourroom:matrix.org TO SWITCH ROOMS.");
+    }
+
+    setTimeout(() => chatInput.focus(), 30);
+
+    if (!isSyncing) {
+      isSyncing = true;
+      startSyncLoop();
     }
   }
 
@@ -171,6 +194,11 @@ document.addEventListener("DOMContentLoaded", () => {
         });
 
         if (!res.ok) {
+          if (res.status === 401) {
+            handleLogout();
+            setStatus("SESSION EXPIRED. SIGN IN AGAIN.", true);
+            return;
+          }
           await new Promise(r => setTimeout(r, 3000));
           continue;
         }
@@ -179,7 +207,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.next_batch) syncToken = data.next_batch;
 
         const joinedRooms = data.rooms?.join || {};
-        const stumpData = joinedRooms[STUMP_ROOM_ID];
+        const stumpData = joinedRooms[activeRoomId];
         const events = stumpData?.timeline?.events || [];
 
         for (const ev of events) {
@@ -196,8 +224,24 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function sendMessage(text) {
     if (!accessToken || !text) return;
+
+    if (text.startsWith("/join ")) {
+      const target = text.replace("/join ", "").trim();
+      if (target) {
+        addChatLine("SYSTEM", `JOINING ${target}...`);
+        try {
+          activeRoomId = await joinRoomByIdOrAlias(target);
+          localStorage.setItem("gtag_mx_room", activeRoomId);
+          addChatLine("SYSTEM", `CONNECTED TO ${target}!`);
+        } catch (err) {
+          addChatLine("SYSTEM", `JOIN FAILED: ${err.message}`);
+        }
+      }
+      return;
+    }
+
     const txnId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    const sendUrl = `${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(STUMP_ROOM_ID)}/send/m.room.message/${txnId}`;
+    const sendUrl = `${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.room.message/${txnId}`;
 
     try {
       const res = await fetch(sendUrl, {
@@ -214,7 +258,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
       if (!res.ok) {
         const errData = await res.json();
-        addChatLine("SYSTEM", `FAILED TO SEND: ${errData.error || res.status}`);
+        addChatLine("SYSTEM", `SEND ERROR: ${errData.error || res.status}`);
       }
     } catch (err) {
       addChatLine("SYSTEM", `NETWORK ERROR: ${err.message}`);
@@ -229,16 +273,15 @@ document.addEventListener("DOMContentLoaded", () => {
     localStorage.removeItem("gtag_mx_token");
     localStorage.removeItem("gtag_mx_user");
     localStorage.removeItem("gtag_mx_server");
+    localStorage.removeItem("gtag_mx_room");
     chatBox.classList.add("gtag-hidden");
     loginBox.classList.remove("gtag-hidden");
     setStatus("SIGNED OUT.");
   }
 
-  // Expose globally just in case HTML has inline onclick attributes
   window.loginElementAccount = handleLogin;
   window.logoutElementAccount = handleLogout;
 
-  // Bind button clicks directly
   loginBtn.onclick = (e) => {
     e.preventDefault();
     e.stopPropagation();
@@ -254,29 +297,24 @@ document.addEventListener("DOMContentLoaded", () => {
     };
   }
 
-  // Enter key in password field submits login
-  passField.addEventListener("keydown", (e) => {
+  window.addEventListener("keydown", (e) => {
     if (e.key === "Enter") {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      handleLogin();
-    }
-  }, true);
-
-  // Enter key in chat input sends message
-  chatInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      e.stopImmediatePropagation();
-      const msg = chatInput.value.trim();
-      if (msg) {
-        chatInput.value = "";
-        sendMessage(msg);
+      if (document.activeElement === chatInput) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        const msg = chatInput.value.trim();
+        if (msg) {
+          chatInput.value = "";
+          sendMessage(msg);
+        }
+      } else if (document.activeElement === passField || document.activeElement === userField) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        handleLogin();
       }
     }
   }, true);
 
-  // Show ready indicator & auto-resume existing session
   setStatus("READY TO SIGN IN.");
   if (accessToken && userId) {
     openStumpRoom();
