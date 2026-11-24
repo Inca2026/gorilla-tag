@@ -2,7 +2,6 @@ document.addEventListener("DOMContentLoaded", () => {
   const GENERAL_ALIAS = "#stump-network-general:matrix.org";
   const RANDOM_ALIAS = "#stump-network-random:matrix.org";
   const FALLBACK_SERVER = "https://matrix.org";
-  const GUEST_RELAY_WS = "wss://://socketsbay.com";
 
   const loginBox = document.getElementById("matrix-login-box");
   const chatBox = document.getElementById("matrix-chat-box");
@@ -23,7 +22,6 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let guestName = sessionStorage.getItem("gtag_guest_nick") || "";
   let isGuestMode = Boolean(!accessToken && guestName);
-  let guestSocket = null;
 
   let syncToken = "";
   let isSyncing = false;
@@ -32,7 +30,6 @@ document.addEventListener("DOMContentLoaded", () => {
   let flareTimeout = null;
 
   window.isMatrixConnected = Boolean(accessToken && userId);
-
   let totalPlaySeconds = parseInt(localStorage.getItem("gtag_total_playtime") || "0", 10);
   const onlinePlayers = new Map();
 
@@ -126,37 +123,7 @@ document.addEventListener("DOMContentLoaded", () => {
     msgBox.scrollTop = msgBox.scrollHeight;
   }
 
-  function connectGuestRelay() {
-    if (guestSocket && guestSocket.readyState <= 1) return;
-    try {
-      guestSocket = new WebSocket(GUEST_RELAY_WS);
-      guestSocket.onopen = () => broadcastGuestPacket({ type: "ping", user: guestName, sec: totalPlaySeconds });
-      guestSocket.onmessage = (evt) => {
-        try {
-          const pkt = JSON.parse(evt.data);
-          if (!pkt || pkt.app !== "GTAG_OS" || pkt.user === guestName) return;
-          if (pkt.type === "ping") {
-            onlinePlayers.set(pkt.user, { seconds: pkt.sec || 0, lastSeen: Date.now(), isVip: Boolean(pkt.isVip) });
-          } else if (pkt.type === "chat" && isGuestMode && activeChannelKey === "general") {
-            addChatLine(pkt.user, pkt.text, Boolean(pkt.isVip));
-            if (document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden")) {
-              showGtagNotification("STUMP CHAT // REPLY", `[${pkt.user}]: ${pkt.text}`);
-            }
-          } else if (pkt.type === "flare") {
-            showVipFlareBanner(pkt.user, pkt.text);
-          }
-        } catch (_) {}
-      };
-      guestSocket.onclose = () => { if (!accessToken) setTimeout(connectGuestRelay, 4000); };
-    } catch (_) {}
-  }
-
-  function broadcastGuestPacket(payload) {
-    if (guestSocket && guestSocket.readyState === WebSocket.OPEN) {
-      guestSocket.send(JSON.stringify({ app: "GTAG_OS", ...payload }));
-    }
-  }
-
+  // --- LOCAL-ONLY GUEST MODE (NO NETWORK TRANSMISSION) ---
   function startGuestSession(openChatAfter = false) {
     if (accessToken) return;
     if (!guestName) {
@@ -168,7 +135,6 @@ document.addEventListener("DOMContentLoaded", () => {
       }
       sessionStorage.setItem("gtag_guest_nick", guestName);
     }
-    connectGuestRelay();
     if (openChatAfter) {
       isGuestMode = true;
       window.isMatrixConnected = false;
@@ -177,13 +143,9 @@ document.addEventListener("DOMContentLoaded", () => {
       openStumpRoom(true);
     }
   }
-  async function sendSilentPresence() {
-    const myNick = userId ? formatDisplayName(userId) : guestName;
-    if (myNick) {
-      broadcastGuestPacket({ type: "ping", user: myNick, sec: totalPlaySeconds, isVip: Boolean(accessToken) });
-    }
-    if (!accessToken || !userId) return;
 
+  async function sendSilentPresence() {
+    if (!accessToken || !userId) return;
     try {
       await fetch(`${homeserver}/_matrix/client/v3/presence/${encodeURIComponent(userId)}/status`, {
         method: "PUT",
@@ -223,7 +185,6 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (_) {}
     return domain.toLowerCase() === "matrix.org" ? FALLBACK_SERVER : `https://${domain}`;
   }
-
   async function handleLogin() {
     const rawUser = userField.value.trim();
     const password = passField.value;
@@ -275,7 +236,6 @@ document.addEventListener("DOMContentLoaded", () => {
       localStorage.setItem("gtag_mx_user", userId);
       localStorage.setItem("gtag_mx_server", homeserver);
 
-      connectGuestRelay();
       if (typeof syncModUI === "function") syncModUI();
       passField.value = "";
       setStatus("");
@@ -289,6 +249,7 @@ document.addEventListener("DOMContentLoaded", () => {
       loginBtn.textContent = "SIGN IN & JOIN";
     }
   }
+
   function renderRoomSidebar() {
     const listEl = document.getElementById("room-sidebar-list");
     if (!listEl) return;
@@ -349,7 +310,6 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     return lookupData.room_id;
   }
-
   async function openStumpRoom(asGuest = false) {
     loginBox.classList.add("gtag-hidden");
     chatBox.classList.remove("gtag-hidden");
@@ -357,11 +317,11 @@ document.addEventListener("DOMContentLoaded", () => {
     sidebarRooms = [];
 
     if (asGuest) {
-      sidebarRooms.push({ name: "general", alias: GENERAL_ALIAS, id: "guest-general" });
+      sidebarRooms.push({ name: "general", alias: GENERAL_ALIAS, id: "guest-local" });
       renderRoomSidebar();
-      addChatLine("SYSTEM", `GUEST SESSION ACTIVE: ${guestName}`);
-      addChatLine("SYSTEM", "SIGN IN WITH ELEMENT TO UNLOCK [★ VIP] & MATRIX ROOMS!");
       await selectStumpChannel(sidebarRooms.at(0));
+      addChatLine("SYSTEM", `GUEST MODE (${guestName}) — LOCAL SANDBOX ACTIVE`);
+      addChatLine("SYSTEM", "SIGN IN WITH ELEMENT TO CHAT LIVE & UNLOCK [★ VIP]!");
     } else {
       addChatLine("SYSTEM", `LOGGED IN AS ${userId} [★ VIP TAB UNLOCKED]`, true);
       try { sidebarRooms.push({ name: "general", alias: GENERAL_ALIAS, id: await resolveAndJoinAlias(GENERAL_ALIAS) }); }
@@ -373,6 +333,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     await sendSilentPresence();
   }
+
   async function startSyncLoop() {
     while (accessToken && isSyncing) {
       try {
@@ -388,17 +349,20 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.next_batch) syncToken = data.next_batch;
 
         const joinedRooms = data.rooms?.join || {};
+
+        // Listen to hidden #stump-network-random:matrix.org for pings & round-trip VIP flares
         if (backendRandomRoomId && joinedRooms[backendRandomRoomId]) {
           for (const ev of (joinedRooms[backendRandomRoomId].timeline?.events || [])) {
-            if (ev.type === "m.room.message" && ev.content?.body && ev.sender !== userId) {
+            if (ev.type === "m.room.message" && ev.content?.body) {
               const displayUser = formatDisplayName(ev.sender);
-              if (ev.content.body.startsWith("[TIME:")) {
+              if (ev.content.body.startsWith("[TIME:") && ev.sender !== userId) {
                 const isNew = !onlinePlayers.has(displayUser);
                 onlinePlayers.set(displayUser, { seconds: parseInt(ev.content.body.slice(6, -1), 10) || 0, lastSeen: Date.now(), isVip: true });
                 if (isNew && !isInitialSync && modConfig?.stumpbeacon) {
                   showGtagNotification("VIP RADAR // MONKE ONLINE", `${displayUser} JUST CAME ONLINE!`);
                 }
               } else if (ev.content.body.startsWith("[VIP_FLARE]") && !isInitialSync) {
+                // Triggered ONLY once #stump-network-random:matrix.org delivers it back
                 showVipFlareBanner(displayUser, ev.content.body.slice(11));
               }
             }
@@ -425,16 +389,13 @@ document.addEventListener("DOMContentLoaded", () => {
 
   async function sendMessage(text) {
     if (!text) return;
+    // Guest Mode: Looks like it sent locally in chat, never hits any network
     if (isGuestMode) {
       addChatLine(guestName, text, false);
-      broadcastGuestPacket({ type: "chat", user: guestName, text, isVip: false });
       playTerminalSfx?.("send");
       return;
     }
     if (!accessToken || !activeRoomId) return;
-    if (activeChannelKey === "general") {
-      broadcastGuestPacket({ type: "chat", user: formatDisplayName(userId), text, isVip: true });
-    }
     const txnId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
     const res = await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.room.message/${txnId}`, {
       method: "PUT",
@@ -446,24 +407,29 @@ document.addEventListener("DOMContentLoaded", () => {
 
   window.sendVipBroadcastFlare = async function() {
     if (!accessToken) return triggerModToast("VIP ONLY", "ELEMENT ACCOUNT REQUIRED!");
-    const shout = prompt("Send a top-screen VIP Flare announcement to all online monkes:");
+    if (!backendRandomRoomId) return triggerModToast("RELAY ERROR", "NOT CONNECTED TO #STUMP-NETWORK-RANDOM!");
+
+    const shout = prompt("Send a top-screen VIP Flare announcement through #stump-network-random:");
     if (!shout?.trim()) return;
     const cleanShout = shout.trim().slice(0, 85);
-    const myVipName = formatDisplayName(userId);
-    showVipFlareBanner(myVipName, cleanShout);
-    broadcastGuestPacket({ type: "flare", user: myVipName, text: cleanShout });
-    if (backendRandomRoomId) {
-      await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/flare_${Date.now()}`, {
-        method: "PUT",
-        headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ msgtype: "m.notice", body: `[VIP_FLARE]${cleanShout}` })
-      }).catch(() => {});
+
+    triggerModToast("TRANSMITTING FLARE...", "ROUTING THROUGH #STUMP-NETWORK-RANDOM...");
+
+    const res = await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/flare_${Date.now()}`, {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "m.notice", body: `[VIP_FLARE]${cleanShout}` })
+    }).catch(() => null);
+
+    if (!res?.ok) {
+      playTerminalSfx?.("error");
+      triggerModToast("FLARE FAILED", `MATRIX REJECTED (${res?.status || "NET"})`);
     }
   };
 
   document.getElementById("btn-add-room")?.addEventListener("click", async e => {
     e.preventDefault();
-    if (!accessToken) return triggerModToast("ELEMENT REQUIRED", "GUESTS CANNOT JOIN CUSTOM MATRIX ROOMS.");
+    if (!accessToken) return triggerModToast("ELEMENT REQUIRED", "GUESTS CANNOT JOIN MATRIX ROOMS.");
     playTerminalSfx?.("click");
     const rawAlias = prompt("Enter Stump Channel Address (e.g. #stump-network-clips:matrix.org):");
     if (!rawAlias?.trim()) return;
@@ -498,7 +464,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("chat-send-btn")?.addEventListener("click", e => { e.preventDefault(); window.sendStumpChatInput(); chatInput.focus(); });
 
   setStatus("READY TO SIGN IN OR CONTINUE AS GUEST.");
-  if (accessToken && userId) { connectGuestRelay(); openStumpRoom(false); }
-  else if (isGuestMode) { connectGuestRelay(); openStumpRoom(true); }
+  if (accessToken && userId) openStumpRoom(false);
+  else if (isGuestMode) openStumpRoom(true);
   else startGuestSession(false);
 });
