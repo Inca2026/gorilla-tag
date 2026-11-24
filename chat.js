@@ -1,5 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
   const DEFAULT_GENERAL_ALIAS = "#stump-network-general:matrix.org";
+  const DEFAULT_RANDOM_ALIAS = "#stump-network-random:matrix.org";
   const FALLBACK_SERVER = "https://matrix.org";
 
   const loginBox = document.getElementById("matrix-login-box");
@@ -22,10 +23,10 @@ document.addEventListener("DOMContentLoaded", () => {
 
   let syncToken = "";
   let isSyncing = false;
-  let cachedRoomList = [];
+  let sidebarRooms = [];
   let toastTimeout = null;
 
-  // --- ONLINE PLAYTIME TRACKING ---
+  // --- ONLINE PLAYTIME TRACKING (ZERO CHAT MESSAGES) ---
   let totalPlaySeconds = parseInt(localStorage.getItem("gtag_total_playtime") || "0", 10);
   const onlinePlayers = new Map();
 
@@ -37,16 +38,11 @@ document.addEventListener("DOMContentLoaded", () => {
     return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
   }
 
-  function getMyDisplayName() {
-    if (userId) return userId.split(":").at(0).replace(/^@/, "");
-    if (guestUserId) {
-      const raw = guestUserId.split(":").at(0).replace(/^@/, "");
-      return /^\d+$/.test(raw) ? `MONKE_${raw.slice(-4)}` : raw;
-    }
-    return "YOU";
+  function formatDisplayName(rawMatrixId) {
+    const clean = rawMatrixId.split(":").at(0).replace(/^@/, "");
+    return /^\d+$/.test(clean) ? `MONKE_${clean.slice(-4)}` : clean;
   }
 
-  // Increment playtime every 1 second and update the leaderboard UI
   setInterval(() => {
     totalPlaySeconds += 1;
     if (totalPlaySeconds % 5 === 0) {
@@ -59,12 +55,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!lbBox || !listEl || lbBox.classList.contains("gtag-hidden")) return;
 
     const now = Date.now();
+    const myName = userId ? formatDisplayName(userId) : (guestUserId ? formatDisplayName(guestUserId) : "YOU");
     const entries = [
-      { name: getMyDisplayName(), seconds: totalPlaySeconds, isSelf: true }
+      { name: myName, seconds: totalPlaySeconds, isSelf: true }
     ];
 
     onlinePlayers.forEach((info, name) => {
-      if (now - info.lastSeen > 35000) return; // Offline after 35s without heartbeat
+      if (now - info.lastSeen > 60000) return;
       const liveElapsed = Math.floor((now - info.lastSeen) / 1000);
       entries.push({
         name,
@@ -73,7 +70,6 @@ document.addEventListener("DOMContentLoaded", () => {
       });
     });
 
-    // Sort highest playtime first
     entries.sort((a, b) => b.seconds - a.seconds);
 
     if (countEl) countEl.textContent = `${entries.length} ONLINE`;
@@ -85,13 +81,28 @@ document.addEventListener("DOMContentLoaded", () => {
     }).join("");
   }, 1000);
 
-  // Broadcast playtime heartbeat every 10 seconds while online
-  setInterval(() => {
+  async function sendSilentPresence() {
     const tok = accessToken || guestToken;
-    const rm = activeRoomId || guestRoomId;
-    if (!tok || !rm) return;
-    sendRawMatrixText(`[TIME:${totalPlaySeconds}]`);
-  }, 10000);
+    const uid = userId || guestUserId;
+    const srv = accessToken ? homeserver : FALLBACK_SERVER;
+    if (!tok || !uid) return;
+
+    try {
+      await fetch(`${srv}/_matrix/client/v3/presence/${encodeURIComponent(uid)}/status`, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${tok}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          presence: "online",
+          status_msg: `GTAG_TIME:${totalPlaySeconds}`
+        })
+      });
+    } catch (_) {}
+  }
+
+  setInterval(sendSilentPresence, 20000);
 
   function setStatus(msg, isError = false) {
     if (!statusLabel) return;
@@ -171,7 +182,7 @@ document.addEventListener("DOMContentLoaded", () => {
         body: "{}"
       });
 
-      sendRawMatrixText(`[TIME:${totalPlaySeconds}]`);
+      await sendSilentPresence();
 
       if (!isSyncing) {
         isSyncing = true;
@@ -263,79 +274,124 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       if (res.ok) {
         const data = await res.json();
-        return data.name || "General";
+        return data.name || "Channel";
       }
     } catch (_) {}
-    return "General";
+    return "Channel";
   }
 
-  async function selectRoomById(rId) {
+  function renderRoomSidebar() {
+    const listEl = document.getElementById("room-sidebar-list");
+    if (!listEl) return;
+
+    listEl.innerHTML = "";
+    sidebarRooms.forEach((rm) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = rm.id === activeRoomId ? "gtag-room-item active" : "gtag-room-item";
+      btn.textContent = `#${rm.name.toLowerCase()}`;
+      btn.title = rm.name;
+      btn.onclick = () => {
+        if (typeof playTerminalSfx === "function") playTerminalSfx("tab");
+        switchActiveRoom(rm.id, rm.name);
+      };
+      listEl.appendChild(btn);
+    });
+  }
+
+  async function switchActiveRoom(rId, knownName = null) {
     activeRoomId = rId;
     localStorage.setItem("gtag_mx_custom_room", activeRoomId);
-    const roomTitle = await getRoomName(activeRoomId);
+    const roomTitle = knownName || await getRoomName(activeRoomId);
+
     const label = document.getElementById("matrix-room-label");
-    if (label) label.textContent = `ROOM: ${roomTitle.toUpperCase()}`;
-    addChatLine("SYSTEM", `CONNECTED TO #${roomTitle.toUpperCase()}!`);
-    sendRawMatrixText(`[TIME:${totalPlaySeconds}]`);
+    if (label) label.textContent = `ROOM: #${roomTitle.toUpperCase()}`;
+
+    msgBox.innerHTML = "";
+    addChatLine("SYSTEM", `SWITCHED TO #${roomTitle.toUpperCase()}`);
+    renderRoomSidebar();
+    await loadRecentRoomHistory(activeRoomId);
+    chatInput.focus();
   }
 
-  async function autoJoinGeneralRoom() {
+  async function loadRecentRoomHistory(rId) {
     try {
-      const lookupRes = await fetch(
-        `${homeserver}/_matrix/client/v3/directory/room/${encodeURIComponent(DEFAULT_GENERAL_ALIAS)}`,
-        { headers: { "Authorization": `Bearer ${accessToken}` } }
-      );
-      const lookupData = await lookupRes.json();
-      if (!lookupRes.ok || !lookupData.room_id) {
-        throw new Error(lookupData.error || "Alias not found");
-      }
-
-      const targetRoomId = lookupData.room_id;
-
-      const joinRes = await fetch(
-        `${homeserver}/_matrix/client/v3/join/${encodeURIComponent(targetRoomId)}`,
-        {
-          method: "POST",
-          headers: {
-            "Authorization": `Bearer ${accessToken}`,
-            "Content-Type": "application/json"
-          },
-          body: "{}"
+      const res = await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(rId)}/messages?dir=b&limit=15`, {
+        headers: { "Authorization": `Bearer ${accessToken}` }
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const history = (data.chunk || []).reverse();
+      for (const ev of history) {
+        if (ev.type === "m.room.message" && ev.content?.body) {
+          if (/^\[(TIME|POS):/.test(ev.content.body)) continue;
+          addChatLine(formatDisplayName(ev.sender), ev.content.body);
         }
-      );
-
-      if (!joinRes.ok) {
-        const joinErr = await joinRes.json();
-        throw new Error(joinErr.error || `Join failed (${joinRes.status})`);
       }
-
-      await selectRoomById(targetRoomId);
-    } catch (err) {
-      addChatLine("SYSTEM", `AUTO-JOIN NOTE: ${err.message}`);
-      await listMyElementRooms();
-    }
+    } catch (_) {}
   }
 
-  async function listMyElementRooms() {
-    addChatLine("SYSTEM", "SCANNING YOUR ELEMENT ROOMS...");
+  async function resolveAndJoinAlias(alias) {
+    const lookupRes = await fetch(
+      `${homeserver}/_matrix/client/v3/directory/room/${encodeURIComponent(alias)}`,
+      { headers: { "Authorization": `Bearer ${accessToken}` } }
+    );
+    const lookupData = await lookupRes.json();
+    if (!lookupRes.ok || !lookupData.room_id) {
+      throw new Error(lookupData.error || `Room ${alias} not found`);
+    }
+
+    const rId = lookupData.room_id;
+    await fetch(`${homeserver}/_matrix/client/v3/join/${encodeURIComponent(rId)}`, {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${accessToken}`,
+        "Content-Type": "application/json"
+      },
+      body: "{}"
+    });
+    return rId;
+  }
+
+  async function populateRoomSidebar() {
+    sidebarRooms = [];
+    const seenIds = new Set();
+
+    // 1. Always ensure #general and #random presets are joined & listed first
+    const presets = [
+      { alias: DEFAULT_GENERAL_ALIAS, fallbackName: "general" },
+      { alias: DEFAULT_RANDOM_ALIAS, fallbackName: "random" }
+    ];
+
+    for (const p of presets) {
+      try {
+        const rId = await resolveAndJoinAlias(p.alias);
+        if (!seenIds.has(rId)) {
+          seenIds.add(rId);
+          const name = await getRoomName(rId);
+          sidebarRooms.push({ id: rId, name: name !== "Channel" ? name : p.fallbackName });
+        }
+      } catch (_) {}
+    }
+
+    // 2. Also load all other joined rooms from the player's Element account
     try {
       const res = await fetch(`${homeserver}/_matrix/client/v3/joined_rooms`, {
         headers: { "Authorization": `Bearer ${accessToken}` }
       });
-      const data = await res.json();
-      const ids = data.joined_rooms || [];
-      cachedRoomList = [];
-
-      for (let i = 0; i < ids.length; i++) {
-        const rId = ids.at(i);
-        const name = await getRoomName(rId);
-        cachedRoomList.push({ id: rId, name });
-        addChatLine("ROOM", `[${i + 1}] ${name}`);
+      if (res.ok) {
+        const data = await res.json();
+        for (const rId of (data.joined_rooms || [])) {
+          if (!seenIds.has(rId)) {
+            seenIds.add(rId);
+            const name = await getRoomName(rId);
+            sidebarRooms.push({ id: rId, name });
+          }
+        }
       }
-      addChatLine("SYSTEM", "TYPE /use 1 (OR 2, 3...) TO SWITCH CHANNELS.");
-    } catch (err) {
-      addChatLine("SYSTEM", `SCAN ERROR: ${err.message}`);
-    }
+    } catch (_) {}
+
+    renderRoomSidebar();
   }
 
   async function openStumpRoom() {
@@ -343,15 +399,20 @@ document.addEventListener("DOMContentLoaded", () => {
     chatBox.classList.remove("gtag-hidden");
     msgBox.innerHTML = "";
     addChatLine("SYSTEM", `LOGGED IN AS ${userId}`);
+    addChatLine("SYSTEM", "LOADING CHANNELS...");
+
+    await populateRoomSidebar();
 
     const savedRoom = localStorage.getItem("gtag_mx_custom_room");
-    if (savedRoom) {
-      await selectRoomById(savedRoom);
+    const initialRoom = sidebarRooms.find(r => r.id === savedRoom) || sidebarRooms.at(0);
+
+    if (initialRoom) {
+      await switchActiveRoom(initialRoom.id, initialRoom.name);
     } else {
-      await autoJoinGeneralRoom();
+      addChatLine("SYSTEM", "NO CHANNELS FOUND. CLICK + ON LEFT TO JOIN ONE.");
     }
 
-    setTimeout(() => chatInput.focus(), 30);
+    await sendSilentPresence();
 
     if (!isSyncing) {
       isSyncing = true;
@@ -383,35 +444,56 @@ document.addEventListener("DOMContentLoaded", () => {
         const data = await res.json();
         const isInitialSync = !syncToken;
         if (data.next_batch) syncToken = data.next_batch;
+        const selfId = userId || guestUserId;
 
+        // 1. Silent Matrix Presence events (Zero chat messages!)
+        const presenceEvents = data.presence?.events || [];
+        for (const pEv of presenceEvents) {
+          if (pEv.type === "m.presence" && pEv.sender && pEv.sender !== selfId) {
+            const pName = formatDisplayName(pEv.sender);
+            const state = pEv.content?.presence;
+            const statusMsg = pEv.content?.status_msg || "";
+
+            if (state === "offline") {
+              onlinePlayers.delete(pName);
+            } else if (state === "online" || statusMsg.startsWith("GTAG_TIME:")) {
+              const parsedSec = statusMsg.startsWith("GTAG_TIME:")
+                ? parseInt(statusMsg.replace("GTAG_TIME:", ""), 10) || 0
+                : (onlinePlayers.get(pName)?.seconds || 0);
+
+              onlinePlayers.set(pName, {
+                seconds: parsedSec,
+                lastSeen: Date.now()
+              });
+            }
+          }
+        }
+
+        // 2. Real room chat messages
         const joinedRooms = data.rooms?.join || {};
         const stumpData = joinedRooms[targetRoom];
         const events = stumpData?.timeline?.events || [];
-        const selfId = userId || guestUserId;
 
         for (const ev of events) {
           if (ev.type === "m.room.message" && ev.content?.body) {
             const body = ev.content.body;
-            const rawSender = ev.sender.split(":").at(0).replace(/^@/, "");
-            const displayUser = /^\d+$/.test(rawSender) ? `MONKE_${rawSender.slice(-4)}` : rawSender;
+            if (/^\[(TIME|POS):/.test(body)) continue;
 
-            // Intercept silent [TIME:seconds] playtime heartbeat packets
-            const timeMatch = body.match(/^\[TIME:(\d+)\]$/);
-            if (timeMatch) {
-              if (ev.sender !== selfId && !isInitialSync) {
-                onlinePlayers.set(displayUser, {
-                  seconds: parseInt(timeMatch.at(1), 10),
-                  lastSeen: Date.now()
-                });
+            const displayUser = formatDisplayName(ev.sender);
+
+            if (ev.sender !== selfId && !isInitialSync) {
+              if (!onlinePlayers.has(displayUser)) {
+                onlinePlayers.set(displayUser, { seconds: 0, lastSeen: Date.now() });
+              } else {
+                onlinePlayers.get(displayUser).lastSeen = Date.now();
               }
-              continue;
             }
 
-            if (accessToken) {
+            if (accessToken && !isInitialSync) {
               addChatLine(displayUser, body);
               const overlay = document.getElementById("gtag-overlay");
               const terminalClosed = overlay && overlay.classList.contains("gtag-hidden");
-              if (!isInitialSync && terminalClosed && ev.sender !== selfId) {
+              if (terminalClosed && ev.sender !== selfId) {
                 showGtagNotification("STUMP CHAT // [T] TO REPLY", `[${displayUser}]: ${body}`);
               }
             }
@@ -423,48 +505,25 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function sendRawMatrixText(bodyText) {
-    const tok = accessToken || guestToken;
-    const rm = activeRoomId || guestRoomId;
-    const srv = accessToken ? homeserver : FALLBACK_SERVER;
-    if (!tok || !rm) return null;
+  async function sendMessage(text) {
+    if (!accessToken || !text || !activeRoomId) return;
 
     const txnId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-    const sendUrl = `${srv}/_matrix/client/v3/rooms/${encodeURIComponent(rm)}/send/m.room.message/${txnId}`;
-
-    return fetch(sendUrl, {
-      method: "PUT",
-      headers: {
-        "Authorization": `Bearer ${tok}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        msgtype: "m.text",
-        body: bodyText
-      })
-    });
-  }
-
-  async function sendMessage(text) {
-    if (!accessToken || !text) return;
-
-    if (text === "/rooms") {
-      await listMyElementRooms();
-      return;
-    }
-
-    if (text.startsWith("/use ")) {
-      const idx = parseInt(text.replace("/use ", "").trim(), 10) - 1;
-      if (cachedRoomList.at(idx)) {
-        await selectRoomById(cachedRoomList.at(idx).id);
-      } else {
-        addChatLine("SYSTEM", "INVALID NUMBER. TYPE /rooms TO SEE YOUR LIST.");
-      }
-      return;
-    }
+    const sendUrl = `${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.room.message/${txnId}`;
 
     try {
-      const res = await sendRawMatrixText(text);
+      const res = await fetch(sendUrl, {
+        method: "PUT",
+        headers: {
+          "Authorization": `Bearer ${accessToken}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          msgtype: "m.text",
+          body: text
+        })
+      });
+
       if (res && res.ok) {
         if (typeof playTerminalSfx === "function") playTerminalSfx("send");
       } else if (res) {
@@ -475,6 +534,34 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (err) {
       addChatLine("SYSTEM", `NETWORK ERROR: ${err.message}`);
     }
+  }
+
+  // "+" Button in Sidebar to Join Any Custom #room:matrix.org
+  const addRoomBtn = document.getElementById("btn-add-room");
+  if (addRoomBtn) {
+    addRoomBtn.onclick = async (e) => {
+      e.preventDefault();
+      if (typeof playTerminalSfx === "function") playTerminalSfx("click");
+      const rawAlias = prompt("Enter Element Room Address (e.g. #stump-network-random:matrix.org):");
+      if (!rawAlias || !rawAlias.trim()) return;
+
+      let formatted = rawAlias.trim();
+      if (!formatted.startsWith("#") && !formatted.startsWith("!")) formatted = `#${formatted}`;
+      if (!formatted.includes(":")) formatted = `${formatted}:matrix.org`;
+
+      try {
+        addChatLine("SYSTEM", `JOINING ${formatted}...`);
+        const rId = await resolveAndJoinAlias(formatted);
+        const name = await getRoomName(rId);
+        if (!sidebarRooms.some(r => r.id === rId)) {
+          sidebarRooms.push({ id: rId, name });
+        }
+        await switchActiveRoom(rId, name);
+      } catch (err) {
+        if (typeof playTerminalSfx === "function") playTerminalSfx("error");
+        addChatLine("SYSTEM", `JOIN FAILED: ${err.message}`);
+      }
+    };
   }
 
   function handleLogout() {
