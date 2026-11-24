@@ -164,17 +164,39 @@ function applyVisualFilters() {
     if (el) el.style.borderColor = modConfig.rgbhud ? rgbColor : "";
   });
 }
-window.activeHackEffects = { screen: false, movement: false, invert: false, hud: false };
+window.activeHackEffects = { screen: false, movement: false, invert: false, hud: false, puppet: false };
+
+const KEY_CODE_NUMS = { KeyW: 87, KeyA: 65, KeyS: 83, KeyD: 68, Space: 32, ShiftLeft: 16, ShiftRight: 16, ArrowUp: 38, ArrowDown: 40, ArrowLeft: 37, ArrowRight: 39 };
+const KEY_CHAR_MAP = { KeyW: "w", KeyA: "a", KeyS: "s", KeyD: "d", Space: " ", ShiftLeft: "Shift", ShiftRight: "Shift", ArrowUp: "ArrowUp", ArrowDown: "ArrowDown", ArrowLeft: "ArrowLeft", ArrowRight: "ArrowRight" };
+
+window.releaseAllMovementKeys = function() {
+  const canvas = document.getElementById("unity-canvas");
+  if (!canvas) return;
+  Object.keys(KEY_CODE_NUMS).forEach(code => {
+    const num = KEY_CODE_NUMS[code];
+    const key = KEY_CHAR_MAP[code];
+    canvas.dispatchEvent(new KeyboardEvent("keyup", { key, code, keyCode: num, which: num, bubbles: true }));
+    window.dispatchEvent(new KeyboardEvent("keyup", { key, code, keyCode: num, which: num, bubbles: true }));
+  });
+};
 
 window.applyIncomingHack = function(effect, state, attackerName) {
   if (!(effect in window.activeHackEffects)) return;
   window.activeHackEffects[effect] = Boolean(state);
 
+  if ((effect === "movement" || effect === "puppet" || effect === "invert") && state) {
+    window.releaseAllMovementKeys();
+  }
+  if (effect === "puppet" && !state) {
+    window.releaseAllMovementKeys();
+  }
+
   const labels = {
     screen: "SCREEN DISABLED",
     movement: "MOVEMENT HACKED",
     invert: "CONTROLS INVERTED",
-    hud: "HUD MODS HIJACKED"
+    hud: "HUD MODS HIJACKED",
+    puppet: "MOVEMENT HIJACKED (PUPPET)"
   };
 
   if (effect === "hud") {
@@ -193,11 +215,19 @@ window.applyIncomingHack = function(effect, state, attackerName) {
 };
 
 window.clearAllIncomingHacks = function() {
-  window.activeHackEffects = { screen: false, movement: false, invert: false, hud: false };
+  window.activeHackEffects = { screen: false, movement: false, invert: false, hud: false, puppet: false };
+  window.releaseAllMovementKeys();
   modConfig.mirrorview = false;
   modConfig.invert = false;
   syncModUI();
   updateHackOverlayIndicators();
+};
+
+window.executeRemotePuppetKey = function(evtType, code, key) {
+  const canvas = document.getElementById("unity-canvas");
+  if (!canvas) return;
+  const num = KEY_CODE_NUMS[code] || 0;
+  canvas.dispatchEvent(new KeyboardEvent(evtType, { key, code, keyCode: num, which: num, bubbles: true }));
 };
 
 function updateHackOverlayIndicators() {
@@ -211,6 +241,7 @@ function updateHackOverlayIndicators() {
   if (fx.movement) activeList.push("⚠ MOVEMENT HACKED");
   if (fx.invert) activeList.push("⚠ CONTROLS INVERTED");
   if (fx.hud) activeList.push("⚠ HUD MODS HIJACKED");
+  if (fx.puppet) activeList.push("⚠ MOVEMENT HIJACKED (PUPPET)");
 
   if (activeList.length === 0) {
     badgeWrap.classList.add("gtag-hidden");
@@ -221,7 +252,7 @@ function updateHackOverlayIndicators() {
   }
 }
 
-const MOVEMENT_CODES = new Set(["KeyW", "KeyA", "KeyS", "KeyD", "Space", "ShiftLeft", "ShiftRight", "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"]);
+const MOVEMENT_CODES = new Set(Object.keys(KEY_CODE_NUMS));
 const INVERT_MAP = { KeyW: "KeyS", KeyS: "KeyW", KeyA: "KeyD", KeyD: "KeyA", ArrowUp: "ArrowDown", ArrowDown: "ArrowUp", ArrowLeft: "ArrowRight", ArrowRight: "ArrowLeft" };
 const INVERT_KEY = { w: "s", s: "w", a: "d", d: "a", W: "S", S: "W", A: "D", D: "A", ArrowUp: "ArrowDown", ArrowDown: "ArrowUp", ArrowLeft: "ArrowRight", ArrowRight: "ArrowLeft" };
 
@@ -231,7 +262,7 @@ const INVERT_KEY = { w: "s", s: "w", a: "d", d: "a", W: "S", S: "W", A: "D", D: 
     if (!document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden")) return;
     const fx = window.activeHackEffects;
 
-    if (fx.movement && MOVEMENT_CODES.has(e.code)) {
+    if ((fx.movement || fx.puppet) && MOVEMENT_CODES.has(e.code)) {
       e.preventDefault();
       e.stopImmediatePropagation();
       return;
@@ -242,7 +273,8 @@ const INVERT_KEY = { w: "s", s: "w", a: "d", d: "a", W: "S", S: "W", A: "D", D: 
       e.stopImmediatePropagation();
       const swappedCode = INVERT_MAP[e.code];
       const swappedKey = INVERT_KEY[e.key] || e.key;
-      document.getElementById("unity-canvas")?.dispatchEvent(new KeyboardEvent(evtType, { key: swappedKey, code: swappedCode, bubbles: true }));
+      const num = KEY_CODE_NUMS[swappedCode] || 0;
+      document.getElementById("unity-canvas")?.dispatchEvent(new KeyboardEvent(evtType, { key: swappedKey, code: swappedCode, keyCode: num, which: num, bubbles: true }));
     }
   }, true);
 });
