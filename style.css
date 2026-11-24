@@ -78,11 +78,14 @@ body, html {
   word-wrap: break-word;
 }
 #chat-messages::-webkit-scrollbar,
-.gtag-mod-grid::-webkit-scrollbar { width: 8px; }
+.gtag-mod-grid::-webkit-scrollbar,
+.gtag-lb-list::-webkit-scrollbar { width: 8px; }
 #chat-messages::-webkit-scrollbar-track,
-.gtag-mod-grid::-webkit-scrollbar-track { background: #0a0f0a; }
+.gtag-mod-grid::-webkit-scrollbar-track,
+.gtag-lb-list::-webkit-scrollbar-track { background: #0a0f0a; }
 #chat-messages::-webkit-scrollbar-thumb,
-.gtag-mod-grid::-webkit-scrollbar-thumb { background: #33ff33; }
+.gtag-mod-grid::-webkit-scrollbar-thumb,
+.gtag-lb-list::-webkit-scrollbar-thumb { background: #33ff33; }
 
 .chat-line { margin-bottom: 6px; }
 .chat-user { color: #ffaa00; }
@@ -224,55 +227,45 @@ input:-webkit-autofill:focus {
   to { transform: translateX(0); opacity: 1; }
 }
 
-/* Top-Right Hide & Seek Radar */
-#gtag-radar {
+/* Top-Right Online Playtime Leaderboard */
+#gtag-leaderboard {
   position: fixed;
   top: 16px;
   right: 16px;
-  width: 188px;
-  background: rgba(17, 24, 17, 0.92);
+  width: 245px;
+  background: rgba(17, 24, 17, 0.9);
   border: 4px solid #2b2b2b;
-  box-shadow: 0 0 0 3px #000, inset 0 0 15px rgba(51, 255, 51, 0.25);
-  padding: 8px;
+  box-shadow: 0 0 0 3px #000, inset 0 0 15px rgba(51, 255, 51, 0.22);
+  padding: 10px;
   z-index: 9500;
   color: #33ff33;
+  pointer-events: none;
 }
 
-.gtag-radar-header {
+.gtag-lb-header {
   display: flex;
   justify-content: space-between;
   font-size: 7px;
   border-bottom: 2px solid #33ff33;
-  padding-bottom: 5px;
-  margin-bottom: 6px;
+  padding-bottom: 6px;
+  margin-bottom: 8px;
 }
 
-#radar-canvas {
-  display: block;
-  margin: 0 auto 6px auto;
-  background: #070c07;
-  border: 2px solid #1f3d1f;
-  border-radius: 50%;
+.gtag-lb-list {
+  max-height: 160px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.gtag-radar-footer {
+.lb-row {
   display: flex;
   justify-content: space-between;
-  align-items: center;
-  font-size: 7px;
+  font-size: 8px;
+  color: #ffaa00;
 }
 
-.gtag-radar-footer button {
-  background: #1d2b1d;
+.lb-row.self-entry {
   color: #33ff33;
-  border: 1px solid #33ff33;
-  font-family: 'Press Start 2P', monospace;
-  font-size: 6px;
-  padding: 3px 5px;
-  cursor: pointer;
-}
-
-.gtag-radar-footer button:hover {
-  background: #33ff33;
-  color: #111811;
 }
