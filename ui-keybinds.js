@@ -168,6 +168,7 @@ function switchTab(tabName) {
   updateKeybindUI();
   if (typeof playTerminalSfx === 'function') playTerminalSfx('tab');
   if (tabName === 'chat') focusActiveChatField();
+  if (tabName === 'vip') setTimeout(() => document.getElementById('vip-flare-input')?.focus(), 15);
 }
 
 window.addEventListener('keydown', (e) => {
@@ -194,6 +195,11 @@ window.addEventListener('keydown', (e) => {
       if (document.activeElement === chatInput) {
         e.preventDefault(); e.stopImmediatePropagation();
         window.sendStumpChatInput?.();
+        return;
+      }
+      if (document.activeElement?.id === 'vip-flare-input') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        window.sendVipBroadcastFlare?.();
         return;
       }
       if (document.activeElement?.id === 'matrix-pass-input' || document.activeElement?.id === 'matrix-user-input') {
