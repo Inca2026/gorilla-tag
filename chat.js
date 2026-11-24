@@ -1,6 +1,9 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const DEFAULT_GENERAL_ALIAS = "#stump-network-general:matrix.org";
-  const DEFAULT_RANDOM_ALIAS = "#stump-network-random:matrix.org";
+  const STUMP_CHANNELS = [
+    { alias: "#stump-network-general:matrix.org", name: "general", type: "text" },
+    { alias: "#stump-network-random:matrix.org", name: "random", type: "text" },
+    { alias: "#stump-network-vc:matrix.org", name: "vc", type: "voice" }
+  ];
   const FALLBACK_SERVER = "https://matrix.org";
 
   const loginBox = document.getElementById("matrix-login-box");
@@ -16,6 +19,8 @@ document.addEventListener("DOMContentLoaded", () => {
   let userId = localStorage.getItem("gtag_mx_user") || "";
   let homeserver = localStorage.getItem("gtag_mx_server") || FALLBACK_SERVER;
   let activeRoomId = localStorage.getItem("gtag_mx_custom_room") || "";
+  let activeChannelKey = "general";
+  let vcLoaded = false;
 
   let guestToken = sessionStorage.getItem("gtag_lb_guest_token") || "";
   let guestUserId = sessionStorage.getItem("gtag_lb_guest_user") || "";
@@ -166,7 +171,7 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!guestToken) return;
 
       const lookupRes = await fetch(
-        `${FALLBACK_SERVER}/_matrix/client/v3/directory/room/${encodeURIComponent(DEFAULT_GENERAL_ALIAS)}`,
+        `${FALLBACK_SERVER}/_matrix/client/v3/directory/room/${encodeURIComponent(STUMP_CHANNELS.at(0).alias)}`,
         { headers: { "Authorization": `Bearer ${guestToken}` } }
       );
       const lookupData = await lookupRes.json();
@@ -267,19 +272,6 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  async function getRoomName(rId) {
-    try {
-      const res = await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(rId)}/state/m.room.name`, {
-        headers: { "Authorization": `Bearer ${accessToken}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        return data.name || "Channel";
-      }
-    } catch (_) {}
-    return "Channel";
-  }
-
   function renderRoomSidebar() {
     const listEl = document.getElementById("room-sidebar-list");
     if (!listEl) return;
@@ -288,30 +280,56 @@ document.addEventListener("DOMContentLoaded", () => {
     sidebarRooms.forEach((rm) => {
       const btn = document.createElement("button");
       btn.type = "button";
-      btn.className = rm.id === activeRoomId ? "gtag-room-item active" : "gtag-room-item";
-      btn.textContent = `#${rm.name.toLowerCase()}`;
-      btn.title = rm.name;
+      const isSelected = rm.name === activeChannelKey;
+      btn.className = isSelected ? "gtag-room-item active" : "gtag-room-item";
+      btn.textContent = rm.type === "voice" ? `🔊 #${rm.name}` : `#${rm.name}`;
+      btn.title = rm.alias || rm.name;
       btn.onclick = () => {
         if (typeof playTerminalSfx === "function") playTerminalSfx("tab");
-        switchActiveRoom(rm.id, rm.name);
+        selectStumpChannel(rm);
       };
       listEl.appendChild(btn);
     });
   }
 
-  async function switchActiveRoom(rId, knownName = null) {
-    activeRoomId = rId;
-    localStorage.setItem("gtag_mx_custom_room", activeRoomId);
-    const roomTitle = knownName || await getRoomName(activeRoomId);
-
+  async function selectStumpChannel(channelObj) {
+    activeChannelKey = channelObj.name;
+    const textPanel = document.getElementById("stump-text-panel");
+    const vcPanel = document.getElementById("stump-vc-panel");
     const label = document.getElementById("matrix-room-label");
-    if (label) label.textContent = `ROOM: #${roomTitle.toUpperCase()}`;
 
-    msgBox.innerHTML = "";
-    addChatLine("SYSTEM", `SWITCHED TO #${roomTitle.toUpperCase()}`);
     renderRoomSidebar();
-    await loadRecentRoomHistory(activeRoomId);
-    chatInput.focus();
+
+    if (channelObj.type === "voice") {
+      if (label) label.textContent = "STUMP NETWORK // VOICE CHAT";
+      textPanel.classList.add("gtag-hidden");
+      vcPanel.classList.remove("gtag-hidden");
+
+      const vcFrame = document.getElementById("vc-frame");
+      if (!vcLoaded && vcFrame) {
+        const displayName = formatDisplayName(userId || "MONKE");
+        vcFrame.src = `https://element.io{encodeURIComponent(displayName)}`;
+        vcLoaded = true;
+      }
+      return;
+    }
+
+    // Otherwise show Text Chat Panel
+    vcPanel.classList.add("gtag-hidden");
+    textPanel.classList.remove("gtag-hidden");
+    if (label) label.textContent = `STUMP NETWORK // #${channelObj.name.toUpperCase()}`;
+
+    if (channelObj.id) {
+      activeRoomId = channelObj.id;
+      localStorage.setItem("gtag_mx_custom_room", activeRoomId);
+      msgBox.innerHTML = "";
+      addChatLine("SYSTEM", `CONNECTED TO #${channelObj.name.toUpperCase()}`);
+      await loadRecentRoomHistory(activeRoomId);
+      chatInput.focus();
+    } else {
+      msgBox.innerHTML = "";
+      addChatLine("SYSTEM", `ROOM ${channelObj.alias} NOT FOUND OR PRIVATE ON MATRIX.ORG`);
+    }
   }
 
   async function loadRecentRoomHistory(rId) {
@@ -353,43 +371,22 @@ document.addEventListener("DOMContentLoaded", () => {
     return rId;
   }
 
-  async function populateRoomSidebar() {
+  async function populateStumpSidebar() {
     sidebarRooms = [];
-    const seenIds = new Set();
 
-    // 1. Always ensure #general and #random presets are joined & listed first
-    const presets = [
-      { alias: DEFAULT_GENERAL_ALIAS, fallbackName: "general" },
-      { alias: DEFAULT_RANDOM_ALIAS, fallbackName: "random" }
-    ];
-
-    for (const p of presets) {
-      try {
-        const rId = await resolveAndJoinAlias(p.alias);
-        if (!seenIds.has(rId)) {
-          seenIds.add(rId);
-          const name = await getRoomName(rId);
-          sidebarRooms.push({ id: rId, name: name !== "Channel" ? name : p.fallbackName });
-        }
-      } catch (_) {}
-    }
-
-    // 2. Also load all other joined rooms from the player's Element account
-    try {
-      const res = await fetch(`${homeserver}/_matrix/client/v3/joined_rooms`, {
-        headers: { "Authorization": `Bearer ${accessToken}` }
-      });
-      if (res.ok) {
-        const data = await res.json();
-        for (const rId of (data.joined_rooms || [])) {
-          if (!seenIds.has(rId)) {
-            seenIds.add(rId);
-            const name = await getRoomName(rId);
-            sidebarRooms.push({ id: rId, name });
-          }
-        }
+    for (const ch of STUMP_CHANNELS) {
+      if (ch.type === "voice") {
+        sidebarRooms.push({ name: ch.name, alias: ch.alias, type: "voice", id: null });
+        continue;
       }
-    } catch (_) {}
+
+      try {
+        const rId = await resolveAndJoinAlias(ch.alias);
+        sidebarRooms.push({ name: ch.name, alias: ch.alias, type: "text", id: rId });
+      } catch (_) {
+        sidebarRooms.push({ name: ch.name, alias: ch.alias, type: "text", id: null });
+      }
+    }
 
     renderRoomSidebar();
   }
@@ -399,17 +396,13 @@ document.addEventListener("DOMContentLoaded", () => {
     chatBox.classList.remove("gtag-hidden");
     msgBox.innerHTML = "";
     addChatLine("SYSTEM", `LOGGED IN AS ${userId}`);
-    addChatLine("SYSTEM", "LOADING CHANNELS...");
+    addChatLine("SYSTEM", "LOADING STUMP NETWORK...");
 
-    await populateRoomSidebar();
+    await populateStumpSidebar();
 
-    const savedRoom = localStorage.getItem("gtag_mx_custom_room");
-    const initialRoom = sidebarRooms.find(r => r.id === savedRoom) || sidebarRooms.at(0);
-
-    if (initialRoom) {
-      await switchActiveRoom(initialRoom.id, initialRoom.name);
-    } else {
-      addChatLine("SYSTEM", "NO CHANNELS FOUND. CLICK + ON LEFT TO JOIN ONE.");
+    const firstChannel = sidebarRooms.at(0);
+    if (firstChannel) {
+      await selectStumpChannel(firstChannel);
     }
 
     await sendSilentPresence();
@@ -446,7 +439,6 @@ document.addEventListener("DOMContentLoaded", () => {
         if (data.next_batch) syncToken = data.next_batch;
         const selfId = userId || guestUserId;
 
-        // 1. Silent Matrix Presence events (Zero chat messages!)
         const presenceEvents = data.presence?.events || [];
         for (const pEv of presenceEvents) {
           if (pEv.type === "m.presence" && pEv.sender && pEv.sender !== selfId) {
@@ -469,7 +461,6 @@ document.addEventListener("DOMContentLoaded", () => {
           }
         }
 
-        // 2. Real room chat messages
         const joinedRooms = data.rooms?.join || {};
         const stumpData = joinedRooms[targetRoom];
         const events = stumpData?.timeline?.events || [];
@@ -536,13 +527,26 @@ document.addEventListener("DOMContentLoaded", () => {
     }
   }
 
-  // "+" Button in Sidebar to Join Any Custom #room:matrix.org
+  // Leave VC button inside the #vc panel
+  const vcLeaveBtn = document.getElementById("btn-vc-disconnect");
+  if (vcLeaveBtn) {
+    vcLeaveBtn.onclick = () => {
+      const vcFrame = document.getElementById("vc-frame");
+      if (vcFrame) vcFrame.src = "about:blank";
+      vcLoaded = false;
+      if (typeof playTerminalSfx === "function") playTerminalSfx("close");
+      const gen = sidebarRooms.at(0);
+      if (gen) selectStumpChannel(gen);
+    };
+  }
+
+  // "+" Button to add another Stump Network channel
   const addRoomBtn = document.getElementById("btn-add-room");
   if (addRoomBtn) {
     addRoomBtn.onclick = async (e) => {
       e.preventDefault();
       if (typeof playTerminalSfx === "function") playTerminalSfx("click");
-      const rawAlias = prompt("Enter Element Room Address (e.g. #stump-network-random:matrix.org):");
+      const rawAlias = prompt("Enter Stump Channel Address (e.g. #stump-network-clips:matrix.org):");
       if (!rawAlias || !rawAlias.trim()) return;
 
       let formatted = rawAlias.trim();
@@ -552,11 +556,12 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         addChatLine("SYSTEM", `JOINING ${formatted}...`);
         const rId = await resolveAndJoinAlias(formatted);
-        const name = await getRoomName(rId);
-        if (!sidebarRooms.some(r => r.id === rId)) {
-          sidebarRooms.push({ id: rId, name });
+        const shortName = formatted.split(":").at(0).replace(/^#stump-network-/, "").replace(/^#/, "");
+        const newCh = { name: shortName, alias: formatted, type: "text", id: rId };
+        if (!sidebarRooms.some(r => r.alias === formatted)) {
+          sidebarRooms.push(newCh);
         }
-        await switchActiveRoom(rId, name);
+        await selectStumpChannel(newCh);
       } catch (err) {
         if (typeof playTerminalSfx === "function") playTerminalSfx("error");
         addChatLine("SYSTEM", `JOIN FAILED: ${err.message}`);
@@ -569,6 +574,9 @@ document.addEventListener("DOMContentLoaded", () => {
     userId = "";
     syncToken = "";
     isSyncing = false;
+    vcLoaded = false;
+    const vcFrame = document.getElementById("vc-frame");
+    if (vcFrame) vcFrame.src = "about:blank";
     localStorage.removeItem("gtag_mx_token");
     localStorage.removeItem("gtag_mx_user");
     localStorage.removeItem("gtag_mx_server");
