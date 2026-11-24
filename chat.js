@@ -76,6 +76,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     onlinePlayers.forEach((info, name) => {
       if (name === myName || now - info.lastSeen > 60000) return;
+      if (userId && (name.startsWith("MONKE_") || name === "guavin")) return;
       const liveElapsed = Math.floor((now - info.lastSeen) / 1000);
       entries.push({
         name,
@@ -178,6 +179,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     activeVcMembers.forEach((lastTs, name) => {
       if (name === me || now - lastTs > 45000) return;
+      if (userId && (name.startsWith("MONKE_") || name === "guavin")) return;
       rows.push(`<div class="vc-user-row"><span>${name}</span><span>CONNECTED</span></div>`);
     });
 
@@ -321,10 +323,8 @@ document.addEventListener("DOMContentLoaded", () => {
       await sendVoiceSignal("*", { type: "hello" });
       renderVcUsersList();
 
-      // Open Element's actual #stump-network-vc call in a compact popup window
-      const displayName = formatDisplayName(userId || "MONKE");
-      const callUrl = `https://element.io{encodeURIComponent(displayName)}`;
-      window.gtagVcPopup = window.open(callUrl, "StumpNetworkVC", "width=420,height=600,menubar=no,toolbar=no");
+      const callUrl = "https://element.io";
+      window.gtagVcPopup = window.open(callUrl, "StumpNetworkVC", "width=440,height=620,menubar=no,toolbar=no");
     } catch (err) {
       if (typeof playTerminalSfx === "function") playTerminalSfx("error");
       if (statusEl) statusEl.textContent = `MIC ERROR: ${err.message}`;
