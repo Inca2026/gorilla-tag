@@ -46,7 +46,7 @@
   <div id="gtag-overlay" class="gtag-hidden">
     <div class="gtag-terminal">
       <div class="gtag-header">
-        <span>GORILLA OS v7.6</span>
+        <span>GORILLA OS v7.7</span>
         <div style="display:flex; gap:4px; flex-wrap:wrap;">
           <button id="btn-tab-chat" class="gtag-btn active" onclick="switchTab('chat')">CHAT</button>
           <button id="btn-tab-sounds" class="gtag-btn" onclick="switchTab('sounds')">SOUNDS</button>
@@ -64,14 +64,20 @@
             <span style="font-size:8px;">USER:</span>
             <input id="matrix-user-input" type="text" placeholder="@user:matrix.org" />
           </div>
-          <div class="gtag-input-row" style="margin-bottom:12px;">
+          <div class="gtag-input-row" style="margin-bottom:10px;">
             <span style="font-size:8px;">PASS:</span>
             <input id="matrix-pass-input" type="password" placeholder="••••••••" />
           </div>
-          <div style="display:flex; gap:6px; flex-wrap:wrap;">
+          <div style="display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px;">
             <button id="matrix-login-btn" class="gtag-btn">SIGN IN &amp; JOIN</button>
-            <button id="matrix-guest-btn" class="gtag-btn">CONTINUE AS GUEST</button>
             <a href="https://element.io" target="_blank" class="gtag-btn" style="text-decoration:none;">CREATE ACCOUNT</a>
+          </div>
+          <div style="border-top:1px solid #1f3d1f; padding-top:10px;">
+            <div class="gtag-input-row" style="margin-bottom:8px;">
+              <span style="font-size:7px; white-space:nowrap;">GUEST NAME:</span>
+              <input id="guest-nick-input" type="text" maxlength="14" placeholder="MONKE_XXXX (SAVED)" style="font-size:9px;" />
+              <button id="matrix-guest-btn" class="gtag-btn" style="white-space:nowrap;">CONTINUE AS GUEST</button>
+            </div>
           </div>
         </div>
 
@@ -199,11 +205,12 @@
       <div id="tab-about" class="gtag-hidden">
         <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">SYSTEM INFORMATION // GORILLA OS</div>
         <div class="gtag-panel-box">
-          <div class="gtag-about-line"><span class="gtag-about-highlight">OS VERSION:</span> GORILLA OS v7.6 (WEB EDITION)</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">OS VERSION:</span> GORILLA OS v7.7 (WEB EDITION)</div>
           <div class="gtag-about-line"><span class="gtag-about-highlight">ACCOUNT STATUS:</span> <span id="about-account-status">GUEST</span></div>
-          <div class="gtag-about-line"><span class="gtag-about-highlight">TELEMETRY RELAY:</span> INSTANT OFFLINE BEACON &amp; VIP FLARE</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">TELEMETRY RELAY:</span> IDLE TIMEOUT (10M) &amp; OFFLINE BEACON</div>
           <div style="font-size:8px; color:#ffaa00; margin-top:8px;">CHANGELOG</div>
           <div class="gtag-changelog-box">
+            <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.7]</span> STOPPED IDLE RELAY CONNECTIONS ON LOGIN SCREEN, ADDED SAVED GUEST DISPLAY NAMES (LOCALSTORAGE) &amp; 10-MIN INACTIVITY TIMEOUT.</div>
             <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.6]</span> FIXED GHOST LEADERBOARD ENTRIES ON LOAD, ADDED INSTANT TAB-CLOSE OFFLINE BEACON, INLINE VIP FLARE INPUT &amp; ABOUT CHANGELOG.</div>
             <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.5]</span> ADDED [★ VIP] VAULT TAB, TOP-CENTER VIP BROADCAST FLARES &amp; SILENT BACKEND GUEST RELAY (MONKE_XXXX).</div>
             <div class="gtag-log-entry"><span class="gtag-log-ver">[v7.0]</span> ADDED 24 CLIENT MODS, SEPARATE GAME/MENU VOLUME SLIDERS, CUSTOM KEYBINDS &amp; DRAGGABLE HUD MODULES.</div>
