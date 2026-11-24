@@ -302,7 +302,7 @@
 
         await createUnityInstance(canvas, {
           dataUrl: mergedDataUrl,
-          frameworkUrl: "Build/gtag.framework.js",
+          frameworkUrl: "Build/gtagwebR2.framework.js.unityweb",
           codeUrl: "Build/gtagwebR2.wasm.unityweb",
           streamingAssetsUrl: "StreamingAssets",
           companyName: "Another Axiom",
@@ -314,7 +314,7 @@
         loadingScreen?.classList.add("gtag-hidden");
       } catch (err) {
         console.error(err);
-        setProgress(100, `BOOT ERROR: ${err.message}`);
+        setProgress(100, `BOOT ERROR: ${err?.message || err}`);
         if (statusEl) statusEl.style.color = "#ff4444";
       }
     })();
