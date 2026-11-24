@@ -1,8 +1,29 @@
-// REPLACE WITH YOUR SPOTIFY DEVELOPER CLIENT ID
+// 1. BUILT-IN SPOTIFY EMBED LINK LOADER (NO API KEY NEEDED)
+function loadCustomSpotifyLink() {
+  const input = document.getElementById('spotify-link-input');
+  const raw = input.value.trim();
+  const match = raw.match(/open\.spotify\.com\/(track|playlist|album|artist)\/([a-zA-Z0-9]+)/);
+
+  if (match) {
+    const type = match;
+    const id = match;
+    document.getElementById('spotify-embed').src = `https://spotify.com{type}/${id}?utm_source=generator&theme=0`;
+    input.value = '';
+  } else {
+    alert('Paste a valid Spotify track, album, or playlist link (e.g., https://spotify.com...)');
+  }
+}
+
+// 2. OPTIONAL: SPOTIFY PREMIUM WEB PLAYBACK SDK (REQUIRES CLIENT ID)
 const SPOTIFY_CLIENT_ID = "YOUR_SPOTIFY_CLIENT_ID";
 const REDIRECT_URI = window.location.origin + window.location.pathname;
 
 async function loginWithSpotify() {
+  if (SPOTIFY_CLIENT_ID === "YOUR_SPOTIFY_CLIENT_ID") {
+    alert("To use the Premium SDK button, add your Spotify Developer Client ID in spotify.js — or just use the built-in Spotify player right above it!");
+    return;
+  }
+
   const verifier = generateRandomString(64);
   const challenge = await generateCodeChallenge(verifier);
   localStorage.setItem('spotify_pkce_verifier', verifier);
