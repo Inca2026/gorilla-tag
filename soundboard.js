@@ -4,9 +4,7 @@ const originalGainConnect = GainNode.prototype.connect;
 const gameGainNodes = new WeakSet();
 
 GainNode.prototype.connect = function(...args) {
-  if (!this._isGorillaOS && this.context !== audioCtx) {
-    gameGainNodes.add(this);
-  }
+  if (!this._isGorillaOS && this.context !== audioCtx) gameGainNodes.add(this);
   return originalGainConnect.apply(this, args);
 };
 
@@ -61,13 +59,13 @@ function playMonkeSound(sound) {
   else if (sound === 'computer') { playTone(950, 'square', 0.06, 0); playTone(1250, 'square', 0.08, 0.07); }
   else if (sound === 'win') { playTone(523.25, 'square', 0.12, 0); playTone(659.25, 'square', 0.12, 0.12); playTone(783.99, 'square', 0.12, 0.24); playTone(1046.5, 'square', 0.35, 0.36); }
   else if (sound === 'banshee') {
-    if (!isElementLoggedIn()) return triggerModToast("ELEMENT LOCKED", "SIGN IN TO ELEMENT FOR VIP SOUNDS!");
+    if (!isElementLoggedIn()) return triggerModToast("ELEMENT LOCKED", "SIGN IN WITH ELEMENT FOR VIP SOUNDS!");
     playTone(900, 'sawtooth', 0.4, 0, 1450, 0.25); playTone(1450, 'sawtooth', 0.4, 0.4, 300, 0.25);
   } else if (sound === 'airhorn') {
-    if (!isElementLoggedIn()) return triggerModToast("ELEMENT LOCKED", "SIGN IN TO ELEMENT FOR VIP SOUNDS!");
+    if (!isElementLoggedIn()) return triggerModToast("ELEMENT LOCKED", "SIGN IN WITH ELEMENT FOR VIP SOUNDS!");
     playTone(480, 'sawtooth', 0.12, 0, null, 0.26); playTone(480, 'sawtooth', 0.12, 0.16, null, 0.26); playTone(480, 'sawtooth', 0.45, 0.32, 465, 0.26);
   } else if (sound === 'shinyrock') {
-    if (!isElementLoggedIn()) return triggerModToast("ELEMENT LOCKED", "SIGN IN TO ELEMENT FOR VIP SOUNDS!");
+    if (!isElementLoggedIn()) return triggerModToast("ELEMENT LOCKED", "SIGN IN WITH ELEMENT FOR VIP SOUNDS!");
     playTone(1174.66, 'sine', 0.15, 0, null, 0.24); playTone(1567.98, 'sine', 0.35, 0.12, null, 0.24);
   }
 }
@@ -79,12 +77,15 @@ function isElementLoggedIn() {
 
 const DEFAULT_MOD_CONFIG = {
   fov: 1.0, sat: 100, bright: 100, contrast: 100, gameVol: 100, menuVol: 100,
+  // Standard Mods
   leaderboard: true, termsfx: true, nightvision: false, crt: false, crosshair: false,
   fps: false, rainbow: false, deepfried: false, invert: false, retro: false,
   vignette: false, cinematic: false, lavavision: false, blueprint: false,
   speedlines: false, sessionclock: false, keystrokes: false, mirrorview: false,
+  // Element VIP Exclusive Mods
   rgbcrosshair: false, goldenui: false, chatnotify: false, vhsglitch: false,
-  ultrafov: false, stumpbeacon: false
+  ultrafov: false, stumpbeacon: false, rgbhud: false, vipreticle: false,
+  autohop: false, matrixrain: false
 };
 
 const MOD_LABELS = {
@@ -94,17 +95,21 @@ const MOD_LABELS = {
   retro: "GAMEBOY MODE", vignette: "TUNNEL VISION", cinematic: "CINEMATIC BARS",
   lavavision: "LAVA VISION", blueprint: "BLUEPRINT WIRE", speedlines: "SPEED LINES",
   sessionclock: "SESSION CLOCK", keystrokes: "KEYSTROKE HUD", mirrorview: "MIRROR WORLD",
-  rgbcrosshair: "[★] RGB RETICLE", goldenui: "[★] GOLD TERMINAL", chatnotify: "[★] CHAT PING SFX",
-  vhsglitch: "[★] VHS TRACKING", ultrafov: "[★] QUAKE PRO FOV", stumpbeacon: "[★] RANDOM ROOM PING"
+  // VIP Tab Exclusives
+  rgbcrosshair: "RGB RETICLE", goldenui: "GOLD TERMINAL", chatnotify: "CHAT PING SFX",
+  vhsglitch: "VHS TRACKING", ultrafov: "QUAKE PRO FOV", stumpbeacon: "ONLINE RADAR PING",
+  rgbhud: "RAINBOW HUD BORDERS", vipreticle: "DIAMOND RETICLE",
+  autohop: "SPACEBAR AUTO-HOP", matrixrain: "MATRIX TINT OVERLAY"
 };
 
 const ELEMENT_EXCLUSIVE_MODS = new Set([
-  "rgbcrosshair", "goldenui", "chatnotify", "vhsglitch", "ultrafov", "stumpbeacon"
+  "rgbcrosshair", "goldenui", "chatnotify", "vhsglitch", "ultrafov",
+  "stumpbeacon", "rgbhud", "vipreticle", "autohop", "matrixrain"
 ]);
 
 let modConfig = { ...DEFAULT_MOD_CONFIG };
-let fpsInterval = null, rainbowInterval = null, rainbowHue = 0, frameCount = 0;
-let sessionStartTime = Date.now();
+let fpsInterval = null, rainbowInterval = null, autoHopInterval = null;
+let rainbowHue = 0, frameCount = 0, sessionStartTime = Date.now();
 
 function triggerModToast(title, text) {
   const toast = document.getElementById("gtag-toast");
@@ -122,7 +127,7 @@ function triggerModToast(title, text) {
 function applyVisualFilters() {
   const canvas = document.getElementById("unity-canvas");
   if (!canvas) return;
-  const activeFov = modConfig.ultrafov ? Math.max(modConfig.fov, 1.35) : modConfig.fov;
+  const activeFov = modConfig.ultrafov ? Math.max(modConfig.fov, 1.38) : modConfig.fov;
   const scaleX = modConfig.mirrorview ? -activeFov : activeFov;
   canvas.style.transform = `scale(${scaleX}, ${activeFov})`;
   canvas.style.transformOrigin = "center center";
@@ -139,11 +144,22 @@ function applyVisualFilters() {
   if (modConfig.invert) filters.push("invert(100%)");
   if (modConfig.retro) filters.push("grayscale(100%) sepia(100%) hue-rotate(55deg) contrast(160%)");
   if (modConfig.vhsglitch) filters.push("contrast(135%) saturate(160%) drop-shadow(3px 0px 0px rgba(255,0,80,0.6))");
+  if (modConfig.matrixrain) filters.push("hue-rotate(85deg) contrast(130%) saturate(180%)");
   if (modConfig.rainbow) filters.push(`hue-rotate(${rainbowHue}deg)`);
 
   canvas.style.filter = filters.join(" ");
+
   const crosshair = document.getElementById("gtag-crosshair");
-  if (crosshair) crosshair.style.color = modConfig.rgbcrosshair ? `hsl(${rainbowHue}, 100%, 55%)` : "#33ff33";
+  if (crosshair) {
+    crosshair.textContent = modConfig.vipreticle ? "◈" : "+";
+    crosshair.style.color = modConfig.rgbcrosshair ? `hsl(${rainbowHue}, 100%, 55%)` : "#33ff33";
+  }
+
+  const rgbColor = `hsl(${rainbowHue}, 100%, 55%)`;
+  ['gtag-hud-hint', 'gtag-leaderboard', 'gtag-keystrokes'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.borderColor = modConfig.rgbhud ? rgbColor : "";
+  });
 }
 function syncModUI() {
   const sliders = [
@@ -162,20 +178,24 @@ function syncModUI() {
   });
 
   const loggedIn = isElementLoggedIn();
+
+  // Toggle VIP Tab Lock Screen vs Unlocked VIP Controls
+  document.getElementById("vip-locked-view")?.classList.toggle("gtag-hidden", loggedIn);
+  document.getElementById("vip-unlocked-view")?.classList.toggle("gtag-hidden", !loggedIn);
+
   Object.keys(MOD_LABELS).forEach(key => {
     const btn = document.getElementById(`mod-${key}`);
     if (btn) {
       const isLocked = ELEMENT_EXCLUSIVE_MODS.has(key) && !loggedIn;
       if (isLocked && modConfig[key]) modConfig[key] = false;
-      btn.textContent = isLocked ? `${MOD_LABELS[key]}: LOCKED` : `${MOD_LABELS[key]}: ${modConfig[key] ? "ON" : "OFF"}`;
+      btn.textContent = `${MOD_LABELS[key]}: ${modConfig[key] && !isLocked ? "ON" : "OFF"}`;
       btn.classList.toggle("active", modConfig[key] && !isLocked);
-      btn.classList.toggle("element-locked", isLocked);
     }
   });
 
   document.getElementById("gtag-leaderboard")?.classList.toggle("gtag-hidden", !modConfig.leaderboard);
   document.getElementById("crt-overlay")?.classList.toggle("gtag-hidden", !modConfig.crt);
-  document.getElementById("gtag-crosshair")?.classList.toggle("gtag-hidden", !(modConfig.crosshair || modConfig.rgbcrosshair));
+  document.getElementById("gtag-crosshair")?.classList.toggle("gtag-hidden", !(modConfig.crosshair || modConfig.rgbcrosshair || modConfig.vipreticle));
   document.getElementById("gtag-vignette")?.classList.toggle("gtag-hidden", !modConfig.vignette);
   document.getElementById("gtag-cinematic")?.classList.toggle("gtag-hidden", !modConfig.cinematic);
   document.getElementById("gtag-speedlines")?.classList.toggle("gtag-hidden", !modConfig.speedlines);
@@ -184,12 +204,24 @@ function syncModUI() {
 
   const aboutStatus = document.getElementById("about-account-status");
   if (aboutStatus) {
-    aboutStatus.textContent = loggedIn ? `VIP ACTIVE (${localStorage.getItem("gtag_mx_user") || "ELEMENT"})` : "GUEST (SIGN IN FOR VIP PERKS)";
+    aboutStatus.textContent = loggedIn
+      ? `ELEMENT VIP (${localStorage.getItem("gtag_mx_user") || "VERIFIED"})`
+      : (sessionStorage.getItem("gtag_lb_guest_user") ? "GUEST ACCOUNT (VIP LOCKED)" : "SIGNED OUT");
   }
 
   clearInterval(rainbowInterval);
-  if (modConfig.rainbow || modConfig.rgbcrosshair) {
+  if (modConfig.rainbow || modConfig.rgbcrosshair || modConfig.rgbhud) {
     rainbowInterval = setInterval(() => { rainbowHue = (rainbowHue + 10) % 360; applyVisualFilters(); }, 60);
+  }
+
+  clearInterval(autoHopInterval);
+  if (modConfig.autohop && loggedIn) {
+    autoHopInterval = setInterval(() => {
+      const canvas = document.getElementById("unity-canvas");
+      if (!canvas || !document.getElementById("gtag-overlay")?.classList.contains("gtag-hidden")) return;
+      canvas.dispatchEvent(new KeyboardEvent("keydown", { key: " ", code: "Space", keyCode: 32, bubbles: true }));
+      setTimeout(() => canvas.dispatchEvent(new KeyboardEvent("keyup", { key: " ", code: "Space", keyCode: 32, bubbles: true })), 60);
+    }, 380);
   }
 
   clearInterval(fpsInterval);
@@ -212,19 +244,17 @@ function syncModUI() {
       parts.push(bindHint);
       hud.textContent = parts.join(" | ");
     }, 1000);
-  } else if (hud) {
-    hud.textContent = bindHint;
-  }
+  } else if (hud) { hud.textContent = bindHint; }
 
   applyAudioVolumes();
   applyVisualFilters();
 }
 
-window.updateSliderMod = function(type, val) { modConfig[type] = parseFloat(val); syncModUI(); };
-window.toggleMod = function(mod) {
+window.updateSliderMod = (type, val) => { modConfig[type] = parseFloat(val); syncModUI(); };
+window.toggleMod = (mod) => {
   if (ELEMENT_EXCLUSIVE_MODS.has(mod) && !isElementLoggedIn()) {
     playTerminalSfx("error");
-    return triggerModToast("ELEMENT ACCOUNT REQUIRED", `SIGN IN TO ELEMENT TO UNLOCK ${MOD_LABELS[mod]}!`);
+    return triggerModToast("ELEMENT VIP ONLY", "SIGN IN WITH AN ELEMENT ACCOUNT TO USE VIP MODS!");
   }
   modConfig[mod] = !modConfig[mod];
   syncModUI();
@@ -232,21 +262,12 @@ window.toggleMod = function(mod) {
   triggerModToast("GORILLA OS MOD", `${MOD_LABELS[mod]}: ${modConfig[mod] ? "ENABLED" : "DISABLED"}`);
 };
 
-window.saveModConfig = function() {
-  localStorage.setItem("gtag_saved_mods", JSON.stringify(modConfig));
-  triggerModToast("CONFIG SAVED", "YOUR MODS & VOLUME LEVELS WILL AUTO-LOAD NEXT SESSION!");
-};
-window.resetAllMods = function() {
-  modConfig = { ...DEFAULT_MOD_CONFIG };
-  localStorage.removeItem("gtag_saved_mods");
-  syncModUI();
-  triggerModToast("MODS RESET", "ALL MODS & SLIDERS RESTORED TO DEFAULT.");
-};
-window.clearUnityCosmetics = function() {
+window.saveModConfig = () => { localStorage.setItem("gtag_saved_mods", JSON.stringify(modConfig)); triggerModToast("CONFIG SAVED", "SETTINGS & VOLUMES SAVED!"); };
+window.resetAllMods = () => { modConfig = { ...DEFAULT_MOD_CONFIG }; localStorage.removeItem("gtag_saved_mods"); syncModUI(); triggerModToast("MODS RESET", "ALL MODS RESTORED."); };
+window.clearUnityCosmetics = () => {
   Object.keys(localStorage).forEach(k => { if (!k.startsWith("gtag_")) localStorage.removeItem(k); });
-  if (window.indexedDB && indexedDB.databases) {
-    indexedDB.databases().then(dbs => dbs.forEach(db => { if (db.name?.includes("idbfs")) indexedDB.deleteDatabase(db.name); }));
-  } else { indexedDB.deleteDatabase("/idbfs"); }
+  if (window.indexedDB?.databases) indexedDB.databases().then(dbs => dbs.forEach(db => { if (db.name?.includes("idbfs")) indexedDB.deleteDatabase(db.name); }));
+  else indexedDB.deleteDatabase("/idbfs");
   triggerModToast("COSMETICS WIPED", "RELOADING GAME...");
   setTimeout(() => window.location.reload(), 1200);
 };
