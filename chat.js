@@ -1,10 +1,6 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const GENERAL_ROOM_ID = "!biZ1u5bq9LjBrSDFLVhfQwS-BYDBCziaT1vKTtq_S4A:matrix.org";
+  const DEFAULT_GENERAL_ALIAS = "#stump-network-general:matrix.org";
   const FALLBACK_SERVER = "https://matrix.org";
-
-  // Clear old cached Space ID if present
-  localStorage.removeItem("gtag_mx_room");
-  let activeRoomId = localStorage.getItem("gtag_mx_custom_room") || GENERAL_ROOM_ID;
 
   const loginBox = document.getElementById("matrix-login-box");
   const chatBox = document.getElementById("matrix-chat-box");
@@ -18,8 +14,10 @@ document.addEventListener("DOMContentLoaded", () => {
   let accessToken = localStorage.getItem("gtag_mx_token") || "";
   let userId = localStorage.getItem("gtag_mx_user") || "";
   let homeserver = localStorage.getItem("gtag_mx_server") || FALLBACK_SERVER;
+  let activeRoomId = localStorage.getItem("gtag_mx_custom_room") || "";
   let syncToken = "";
   let isSyncing = false;
+  let cachedRoomList = [];
 
   function setStatus(msg, isError = false) {
     if (!statusLabel) return;
@@ -122,27 +120,78 @@ document.addEventListener("DOMContentLoaded", () => {
       });
       if (res.ok) {
         const data = await res.json();
-        return data.name || rId;
+        return data.name || "General";
       }
     } catch (_) {}
-    return rId;
+    return "General";
   }
 
-  async function joinRoomByIdOrAlias(target) {
-    const encoded = encodeURIComponent(target);
-    const joinRes = await fetch(`${homeserver}/_matrix/client/v3/join/${encoded}?server_name=matrix.org`, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-        "Content-Type": "application/json"
-      },
-      body: "{}"
-    });
-    const joinData = await joinRes.json();
-    if (!joinRes.ok) {
-      throw new Error(joinData.error || `HTTP ${joinRes.status}`);
+  async function selectRoomById(rId) {
+    activeRoomId = rId;
+    localStorage.setItem("gtag_mx_custom_room", activeRoomId);
+    const roomTitle = await getRoomName(activeRoomId);
+    const label = document.getElementById("matrix-room-label");
+    if (label) label.textContent = `ROOM: ${roomTitle.toUpperCase()}`;
+    addChatLine("SYSTEM", `CONNECTED TO #${roomTitle.toUpperCase()}!`);
+  }
+
+  async function autoJoinGeneralRoom() {
+    try {
+      const lookupRes = await fetch(
+        `${homeserver}/_matrix/client/v3/directory/room/${encodeURIComponent(DEFAULT_GENERAL_ALIAS)}`,
+        { headers: { "Authorization": `Bearer ${accessToken}` } }
+      );
+      const lookupData = await lookupRes.json();
+      if (!lookupRes.ok || !lookupData.room_id) {
+        throw new Error(lookupData.error || "Alias not found");
+      }
+
+      const targetRoomId = lookupData.room_id;
+
+      const joinRes = await fetch(
+        `${homeserver}/_matrix/client/v3/join/${encodeURIComponent(targetRoomId)}`,
+        {
+          method: "POST",
+          headers: {
+            "Authorization": `Bearer ${accessToken}`,
+            "Content-Type": "application/json"
+          },
+          body: "{}"
+        }
+      );
+
+      if (!joinRes.ok) {
+        const joinErr = await joinRes.json();
+        throw new Error(joinErr.error || `Join failed (${joinRes.status})`);
+      }
+
+      await selectRoomById(targetRoomId);
+    } catch (err) {
+      addChatLine("SYSTEM", `AUTO-JOIN NOTE: ${err.message}`);
+      await listMyElementRooms();
     }
-    return joinData.room_id || target;
+  }
+
+  async function listMyElementRooms() {
+    addChatLine("SYSTEM", "SCANNING YOUR ELEMENT ROOMS...");
+    try {
+      const res = await fetch(`${homeserver}/_matrix/client/v3/joined_rooms`, {
+        headers: { "Authorization": `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      const ids = data.joined_rooms || [];
+      cachedRoomList = [];
+
+      for (let i = 0; i < ids.length; i++) {
+        const rId = ids.at(i);
+        const name = await getRoomName(rId);
+        cachedRoomList.push({ id: rId, name });
+        addChatLine("ROOM", `[${i + 1}] ${name}`);
+      }
+      addChatLine("SYSTEM", "TYPE /use 1 (OR 2, 3...) TO SWITCH CHANNELS.");
+    } catch (err) {
+      addChatLine("SYSTEM", `SCAN ERROR: ${err.message}`);
+    }
   }
 
   async function openStumpRoom() {
@@ -150,18 +199,13 @@ document.addEventListener("DOMContentLoaded", () => {
     chatBox.classList.remove("gtag-hidden");
     msgBox.innerHTML = "";
     addChatLine("SYSTEM", `LOGGED IN AS ${userId}`);
+    addChatLine("SYSTEM", `JOINING ${DEFAULT_GENERAL_ALIAS}...`);
 
-    activeRoomId = localStorage.getItem("gtag_mx_custom_room") || GENERAL_ROOM_ID;
-
-    try {
-      activeRoomId = await joinRoomByIdOrAlias(activeRoomId);
-      const roomTitle = await getRoomName(activeRoomId);
-      const label = document.getElementById("matrix-room-label");
-      if (label) label.textContent = `ROOM: ${roomTitle.toUpperCase()}`;
-      addChatLine("SYSTEM", `CONNECTED TO #${roomTitle.toUpperCase()}!`);
-    } catch (err) {
-      addChatLine("SYSTEM", `JOIN ERROR: ${err.message}`);
-      addChatLine("SYSTEM", "TYPE /join !roomid:matrix.org TO SWITCH CHANNELS.");
+    const savedRoom = localStorage.getItem("gtag_mx_custom_room");
+    if (savedRoom) {
+      await selectRoomById(savedRoom);
+    } else {
+      await autoJoinGeneralRoom();
     }
 
     setTimeout(() => chatInput.focus(), 30);
@@ -212,20 +256,17 @@ document.addEventListener("DOMContentLoaded", () => {
   async function sendMessage(text) {
     if (!accessToken || !text) return;
 
-    if (text.startsWith("/join ")) {
-      const target = text.replace("/join ", "").trim();
-      if (target) {
-        addChatLine("SYSTEM", `JOINING ${target}...`);
-        try {
-          activeRoomId = await joinRoomByIdOrAlias(target);
-          localStorage.setItem("gtag_mx_custom_room", activeRoomId);
-          const roomTitle = await getRoomName(activeRoomId);
-          const label = document.getElementById("matrix-room-label");
-          if (label) label.textContent = `ROOM: ${roomTitle.toUpperCase()}`;
-          addChatLine("SYSTEM", `CONNECTED TO #${roomTitle.toUpperCase()}!`);
-        } catch (err) {
-          addChatLine("SYSTEM", `JOIN FAILED: ${err.message}`);
-        }
+    if (text === "/rooms") {
+      await listMyElementRooms();
+      return;
+    }
+
+    if (text.startsWith("/use ")) {
+      const idx = parseInt(text.replace("/use ", "").trim(), 10) - 1;
+      if (cachedRoomList.at(idx)) {
+        await selectRoomById(cachedRoomList.at(idx).id);
+      } else {
+        addChatLine("SYSTEM", "INVALID NUMBER. TYPE /rooms TO SEE YOUR LIST.");
       }
       return;
     }
