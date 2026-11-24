@@ -54,6 +54,7 @@ const DEFAULT_MOD_CONFIG = {
   fov: 1.0,
   sat: 100,
   bright: 100,
+  radar: false,
   nightvision: false,
   crt: false,
   crosshair: false,
@@ -67,6 +68,7 @@ const DEFAULT_MOD_CONFIG = {
 };
 
 const MOD_LABELS = {
+  radar: "HIDE/SEEK RADAR",
   nightvision: "NIGHT VISION",
   crt: "CRT SCANLINES",
   crosshair: "CROSSHAIR",
@@ -158,6 +160,7 @@ function syncModUI() {
     }
   });
 
+  document.getElementById("gtag-radar")?.classList.toggle("gtag-hidden", !modConfig.radar);
   document.getElementById("crt-overlay")?.classList.toggle("gtag-hidden", !modConfig.crt);
   document.getElementById("gtag-crosshair")?.classList.toggle("gtag-hidden", !modConfig.crosshair);
   document.getElementById("gtag-vignette")?.classList.toggle("gtag-hidden", !modConfig.vignette);
@@ -180,11 +183,11 @@ function syncModUI() {
     };
     requestAnimationFrame(countFrames);
     fpsInterval = setInterval(() => {
-      hud.textContent = `FPS: ${frameCount} | [TAB] TERMINAL | [T] CHAT | [B] SOUNDS`;
+      hud.textContent = `FPS: ${frameCount} | [TAB] TERMINAL | [T] CHAT | [B] SOUNDS | [R] SYNC`;
       frameCount = 0;
     }, 1000);
   } else if (hud) {
-    hud.textContent = `[TAB] TERMINAL | [T] CHAT | [B] SOUNDBOARD`;
+    hud.textContent = `[TAB] TERMINAL | [T] CHAT | [B] SOUNDS | [R] SPAWN SYNC`;
   }
 
   applyVisualFilters();
