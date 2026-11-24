@@ -1,141 +1,138 @@
-// ZERO-CONFIG PEER-TO-PEER (WEBRTC) CHAT VIA PEERJS
-const LOBBY_HOST_ID = "inca2026-gtag-stump-lobby-v1";
-const playerName = "MONKE_" + Math.floor(1000 + Math.random() * 9000);
+// ELEMENT / MATRIX DEFAULT ROOM CHAT
+const MATRIX_HOMESERVER = "https://matrix.org";
+let currentRoomAlias = "#gorillatag:matrix.org";
 
+const playerName = "MONKE_" + Math.floor(1000 + Math.random() * 9000);
 const chatInput = document.getElementById('chat-input');
 const msgBox = document.getElementById('chat-messages');
 
-let peer = null;
-let isHost = false;
-let hostConn = null;
-const clientConns = new Map(); // Host tracks all connected players
-const seenMsgIds = new Set();  // Prevents duplicate messages
+let accessToken = null;
+let roomId = null;
+let nextBatch = "";
+let pollingActive = false;
 
-function startP2P() {
-  appendMessage("SYSTEM", "SEARCHING FOR P2P STUMP LOBBY...");
+async function initMatrix() {
+  try {
+    appendMessage("SYSTEM", "CONNECTING TO MATRIX.ORG...");
 
-  // 1. Try to become the Lobby Host first
-  const hostAttempt = new Peer(LOBBY_HOST_ID);
-
-  hostAttempt.on('open', () => {
-    peer = hostAttempt;
-    isHost = true;
-    appendMessage("SYSTEM", `HOSTING LOBBY AS ${playerName} (1 ONLINE)`);
-
-    // Listen for other players joining
-    peer.on('connection', (conn) => {
-      conn.on('open', () => {
-        clientConns.set(conn.peer, conn);
-        broadcastSystem(`${conn.metadata?.name || "A MONKE"} JOINED (${clientConns.size + 1} ONLINE)`);
+    // Register or reuse a guest token stored in sessionStorage
+    let savedToken = sessionStorage.getItem("matrix_guest_token");
+    if (!savedToken) {
+      const regRes = await fetch(`${MATRIX_HOMESERVER}/_matrix/client/v3/register?kind=guest`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({})
       });
+      const regData = await regRes.json();
+      if (!regData.access_token) throw new Error(regData.error || "Guest login blocked");
+      savedToken = regData.access_token;
+      sessionStorage.setItem("matrix_guest_token", savedToken);
+    }
+    accessToken = savedToken;
 
-      conn.on('data', (packet) => {
-        if (packet.type === 'chat') {
-          displayPacket(packet);
-          // Relay message to all other connected players
-          relayToClients(packet, conn.peer);
+    await joinMatrixRoom(currentRoomAlias);
+    if (!pollingActive) {
+      pollingActive = true;
+      pollMatrix();
+    }
+  } catch (err) {
+    appendMessage("SYSTEM", `ELEMENT ERROR: ${err.message}`);
+  }
+}
+
+async function joinMatrixRoom(aliasOrId) {
+  const res = await fetch(`${MATRIX_HOMESERVER}/_matrix/client/v3/join/${encodeURIComponent(aliasOrId)}`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({})
+  });
+  const data = await res.json();
+  if (!data.room_id) throw new Error(data.error || "Could not join room");
+
+  roomId = data.room_id;
+  currentRoomAlias = aliasOrId;
+  document.getElementById('matrix-room-label').textContent = `ROOM: ${aliasOrId}`;
+  appendMessage("SYSTEM", `JOINED ${aliasOrId} AS ${playerName}`);
+}
+
+async function pollMatrix() {
+  while (accessToken) {
+    try {
+      const url = `${MATRIX_HOMESERVER}/_matrix/client/v3/sync?timeout=15000${nextBatch ? `&since=${nextBatch}` : ""}`;
+      const res = await fetch(url, {
+        headers: { "Authorization": `Bearer ${accessToken}` }
+      });
+      const data = await res.json();
+      if (data.next_batch) nextBatch = data.next_batch;
+
+      if (roomId && data.rooms?.join?.[roomId]) {
+        const events = data.rooms.join[roomId].timeline?.events || [];
+        for (const ev of events) {
+          if (ev.type === "m.room.message" && ev.content?.body) {
+            const raw = ev.content.body;
+            const match = raw.match(/^\[(MONKE_\d+)\]:\s*(.*)$/);
+            if (match) {
+              appendMessage(match, match);
+            } else {
+              const sender = ev.sender.split(":").replace("@", "");
+              appendMessage(sender, raw);
+            }
+          }
         }
-      });
-
-      conn.on('close', () => {
-        clientConns.delete(conn.peer);
-        broadcastSystem(`A MONKE LEFT (${clientConns.size + 1} ONLINE)`);
-      });
-    });
-  });
-
-  // 2. If LOBBY_HOST_ID is already taken, join as a Client instead!
-  hostAttempt.on('error', (err) => {
-    if (err.type === 'unavailable-id') {
-      hostAttempt.destroy();
-      connectAsClient();
-    } else {
-      appendMessage("SYSTEM", `P2P ERROR: ${err.type} - RETRYING...`);
-      setTimeout(startP2P, 4000);
-    }
-  });
-}
-
-function connectAsClient() {
-  peer = new Peer(); // Assigns a random unique Peer ID
-
-  peer.on('open', () => {
-    hostConn = peer.connect(LOBBY_HOST_ID, {
-      metadata: { name: playerName },
-      reliable: true
-    });
-
-    hostConn.on('open', () => {
-      appendMessage("SYSTEM", `CONNECTED TO P2P LOBBY AS ${playerName}`);
-    });
-
-    hostConn.on('data', (packet) => {
-      if (packet.type === 'chat' || packet.type === 'sys') {
-        displayPacket(packet);
       }
-    });
-
-    // If the Host closes their tab, elect a new Host automatically
-    hostConn.on('close', () => {
-      appendMessage("SYSTEM", "HOST DISCONNECTED - MIGRATING LOBBY...");
-      peer.destroy();
-      setTimeout(startP2P, 1500 + Math.random() * 1500);
-    });
-  });
-}
-
-function relayToClients(packet, excludePeerId = null) {
-  for (const [id, conn] of clientConns.entries()) {
-    if (id !== excludePeerId && conn.open) {
-      conn.send(packet);
+    } catch (e) {
+      await new Promise(r => setTimeout(r, 3000));
     }
   }
 }
 
-function broadcastSystem(text) {
-  const packet = {
-    type: 'sys',
-    id: Date.now() + "_" + Math.random(),
-    user: 'SYSTEM',
-    text
-  };
-  displayPacket(packet);
-  if (isHost) relayToClients(packet);
-}
+async function sendMatrixMessage(text) {
+  // Allow switching Element rooms via "/room #roomname:matrix.org"
+  if (text.startsWith("/room ")) {
+    const newRoom = text.replace("/room ", "").trim();
+    if (newRoom) {
+      try {
+        await joinMatrixRoom(newRoom);
+      } catch (e) {
+        appendMessage("SYSTEM", `FAILED TO JOIN ${newRoom}: ${e.message}`);
+      }
+    }
+    return;
+  }
 
-function sendChatMessage(text) {
-  const packet = {
-    type: 'chat',
-    id: Date.now() + "_" + Math.random(),
-    user: playerName,
-    text
-  };
+  if (!accessToken || !roomId) {
+    appendMessage("SYSTEM", "NOT CONNECTED TO ELEMENT YET...");
+    return;
+  }
 
-  displayPacket(packet);
+  const txnId = Date.now() + "_" + Math.random().toString(36).slice(2);
+  const res = await fetch(`${MATRIX_HOMESERVER}/_matrix/client/v3/rooms/${encodeURIComponent(roomId)}/send/m.room.message/${txnId}`, {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${accessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      msgtype: "m.text",
+      body: `[${playerName}]: ${text}`
+    })
+  });
 
-  if (isHost) {
-    relayToClients(packet);
-  } else if (hostConn && hostConn.open) {
-    hostConn.send(packet);
-  } else {
-    appendMessage("SYSTEM", "NOT CONNECTED TO LOBBY YET...");
+  if (!res.ok) {
+    appendMessage("SYSTEM", "MESSAGE FAILED (ROOM MAY REQUIRE REGISTERED ELEMENT ACCOUNT)");
   }
 }
 
-function displayPacket(packet) {
-  if (seenMsgIds.has(packet.id)) return;
-  seenMsgIds.add(packet.id);
-  appendMessage(packet.user, packet.text);
-}
-
-// Capture Enter key before Unity WebGL steals it
 chatInput.addEventListener('keydown', (e) => {
   if (e.key === 'Enter' && chatInput.value.trim() !== '') {
     e.preventDefault();
     e.stopImmediatePropagation();
     const text = chatInput.value.trim();
     chatInput.value = '';
-    sendChatMessage(text);
+    sendMatrixMessage(text);
   }
 }, true);
 
@@ -151,4 +148,4 @@ function escapeHTML(str) {
   return str.replace(/[&<>'"]/g, tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag]));
 }
 
-startP2P();
+initMatrix();
