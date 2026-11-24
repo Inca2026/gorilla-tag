@@ -488,6 +488,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 if (effect === "clear") window.clearAllIncomingHacks?.();
                 else window.applyIncomingHack?.(effect, stateStr === "1", formatDisplayName(ev.sender));
               }
+            } else if (body.startsWith("[HUDHACK|")) {
+              const [targetName, modKey, stateStr] = body.slice(9, -1).split("|");
+              const isForMe = targetName === "ALL" || targetName.toLowerCase() === myPublicName.toLowerCase();
+              if (isForMe) window.applyRemoteHudToggle?.(modKey, stateStr === "1", formatDisplayName(ev.sender));
+            } else if (body.startsWith("[GAMEMODE|BREACH|")) {
+              const [flagStr, secStr] = body.slice(17, -1).split("|");
+              window.handleIncomingBreachMode?.(flagStr === "1", parseInt(secStr, 10) || 30, formatDisplayName(ev.sender));
             } else if (body.startsWith("[PUPPET|")) {
               const [targetName, evtType, code, key] = body.slice(8, -1).split("|");
               const isForMe = targetName === "ALL" || targetName.toLowerCase() === myPublicName.toLowerCase();
@@ -566,10 +573,253 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!res?.ok) { playTerminalSfx?.("error"); triggerModToast("FLARE FAILED", `MATRIX REJECTED (${res?.status || "NET"})`); }
   };
 
+  let isBreachRunning = false;
+  let breachIntervalSec = 30;
+  let breachCycleTimer = null;
+  let breachCountdownTimer = null;
+  let breachSecondsLeft = 30;
+  let currentBreachHack = "";
+
+  window.updateBreachFrequency = function(val) {
+    breachIntervalSec = Math.max(5, Math.min(60, parseInt(val, 10) || 30));
+    const lbl = document.getElementById("val-breach-freq");
+    if (lbl) lbl.textContent = `${breachIntervalSec}S`;
+    if (isBreachRunning) {
+      clearInterval(breachCycleTimer);
+      breachCycleTimer = setInterval(() => window.runBreachCycleStep?.(), breachIntervalSec * 1000);
+      fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/br_${Date.now()}`, {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ msgtype: "m.notice", body: `[GAMEMODE|BREACH|1|${breachIntervalSec}]` })
+      }).catch(() => {});
+    }
+  };
+  window.handleIncomingBreachMode = function(active, intervalSec, hostName) {
+    const banner = document.getElementById("gtag-breach-banner");
+    const btn = document.getElementById("btn-gamemode-breach");
+    clearInterval(breachCountdownTimer);
+
+    if (active) {
+      const cycleLen = intervalSec || 30;
+      breachSecondsLeft = cycleLen;
+      banner?.classList.remove("gtag-hidden");
+      if (btn) { btn.textContent = "BREACH: ON"; btn.classList.add("active"); }
+      playTerminalSfx?.("error");
+      triggerModToast("⚠ BREACH MODE ACTIVE", `${hostName.toUpperCase()} STARTED BREACH! RANDOM HACK EVERY ${cycleLen}S.`);
+      breachCountdownTimer = setInterval(() => {
+        breachSecondsLeft = breachSecondsLeft <= 1 ? cycleLen : breachSecondsLeft - 1;
+        const lbl = document.getElementById("breach-banner-text");
+        if (lbl) lbl.textContent = `⚠ BREACH MODE // NEXT RANDOM HACK IN ${breachSecondsLeft}S`;
+      }, 1000);
+    } else {
+      isBreachRunning = false;
+      clearInterval(breachCycleTimer);
+      banner?.classList.add("gtag-hidden");
+      if (btn) { btn.textContent = "BREACH: OFF"; btn.classList.remove("active"); }
+      window.clearAllIncomingHacks?.();
+      triggerModToast("BREACH ENDED", "ALL BREACH HACKS CLEARED.");
+    }
+  };
+
+  window.toggleBreachGameMode = async function() {
+    if (!accessToken) return triggerModToast("VIP ONLY", "ELEMENT ACCOUNT REQUIRED!");
+    if (!backendRandomRoomId) return triggerModToast("OFFLINE", "CONNECT TO CHAT FIRST!");
+
+    isBreachRunning = !isBreachRunning;
+    clearInterval(breachCycleTimer);
+
+    const sendNotice = (msg) => fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/br_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "m.notice", body: msg })
+    }).catch(() => {});
+
+    await sendNotice(`[GAMEMODE|BREACH|${isBreachRunning ? 1 : 0}|${breachIntervalSec}]`);
+
+    if (isBreachRunning) {
+      const pool = ["screen", "movement", "invert", "hud"];
+      window.runBreachCycleStep = async () => {
+        if (!isBreachRunning) return;
+        await sendNotice("[HACK|ALL|clear|0]");
+        const choices = pool.filter(h => h !== currentBreachHack);
+        currentBreachHack = choices[Math.floor(Math.random() * choices.length)];
+        setTimeout(() => { if (isBreachRunning) sendNotice(`[HACK|ALL|${currentBreachHack}|1]`); }, 350);
+      };
+      window.runBreachCycleStep();
+      breachCycleTimer = setInterval(() => window.runBreachCycleStep(), breachIntervalSec * 1000);
+    } else {
+      await sendNotice("[HACK|ALL|clear|0]");
+    }
+  };
+
   const HACK_SECRET_CODE = "elsd6932";
   let isHackUnlocked = sessionStorage.getItem("gtag_hack_unlocked") === "1";
   let selectedHackTarget = "";
   const targetHackStates = new Map();
+  const targetHudStates = new Map();
+  let activePuppetTarget = "";
+  const puppetHeldKeys = new Set();
+  let lastPuppetSendTs = 0;
+
+  function syncHackTerminalUI() {
+    document.getElementById("hack-locked-view")?.classList.toggle("gtag-hidden", isHackUnlocked);
+    document.getElementById("hack-unlocked-view")?.classList.toggle("gtag-hidden", !isHackUnlocked);
+    if (isHackUnlocked) window.renderHackTargetList();
+  }
+
+  window.unlockHackTerminal = function() {
+    const codeInput = document.getElementById("hack-code-input");
+    const errEl = document.getElementById("hack-code-error");
+    if ((codeInput?.value.trim() || "") === HACK_SECRET_CODE) {
+      isHackUnlocked = true;
+      sessionStorage.setItem("gtag_hack_unlocked", "1");
+      if (codeInput) codeInput.value = "";
+      if (errEl) errEl.textContent = "";
+      playTerminalSfx?.("vip");
+      syncHackTerminalUI();
+      triggerModToast("ACCESS GRANTED", "MONKE HACK TERMINAL UNLOCKED.");
+    } else {
+      playTerminalSfx?.("error");
+      if (errEl) errEl.textContent = "INVALID ACCESS CODE.";
+    }
+  };
+  let lastGlobalSfxTs = 0;
+  window.broadcastGlobalSound = async function(soundKey) {
+    if (!accessToken || !backendRandomRoomId) return;
+    const now = Date.now();
+    if (now - lastGlobalSfxTs < 2500) {
+      return triggerModToast("SFX COOLDOWN", "WAIT 2 SECONDS BETWEEN GLOBAL SOUNDS!");
+    }
+    lastGlobalSfxTs = now;
+    await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/sfx_${now}`, {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "m.notice", body: `[SFX|${soundKey}]` })
+    }).catch(() => {});
+  };
+
+  async function sendMessage(text) {
+    const tok = accessToken || guestToken;
+    const srv = accessToken ? homeserver : FALLBACK_SERVER;
+    if (!tok || !text || !activeRoomId) return;
+
+    const outboundBody = isGuestMode ? `[GUEST:${guestName}] ${text}` : text;
+    const txnId = `${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+    const res = await fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(activeRoomId)}/send/m.room.message/${txnId}`, {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "m.text", body: outboundBody })
+    });
+    if (res?.ok) playTerminalSfx?.("send");
+    else { playTerminalSfx?.("error"); addChatLine("SYSTEM", `SEND ERROR (${res?.status || "NET"})`); }
+  }
+
+  window.sendVipBroadcastFlare = async function() {
+    if (!accessToken) return triggerModToast("VIP ONLY", "ELEMENT ACCOUNT REQUIRED!");
+    if (!backendRandomRoomId) return triggerModToast("RELAY ERROR", "NOT CONNECTED TO #STUMP-NETWORK-RANDOM!");
+
+    const flareInput = document.getElementById("vip-flare-input");
+    const shout = flareInput?.value.trim() || "";
+    if (!shout) {
+      playTerminalSfx?.("error");
+      flareInput?.focus();
+      return triggerModToast("EMPTY FLARE", "TYPE A MESSAGE TO BROADCAST FIRST!");
+    }
+
+    flareInput.value = "";
+    triggerModToast("TRANSMITTING FLARE...", "ROUTING THROUGH #STUMP-NETWORK-RANDOM...");
+    const res = await fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/flare_${Date.now()}`, {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "m.notice", body: `[VIP_FLARE]${shout.slice(0, 85)}` })
+    }).catch(() => null);
+    if (!res?.ok) { playTerminalSfx?.("error"); triggerModToast("FLARE FAILED", `MATRIX REJECTED (${res?.status || "NET"})`); }
+  };
+
+  let isBreachRunning = false;
+  let breachIntervalSec = 30;
+  let breachCycleTimer = null;
+  let breachCountdownTimer = null;
+  let breachSecondsLeft = 30;
+  let currentBreachHack = "";
+
+  window.updateBreachFrequency = function(val) {
+    breachIntervalSec = Math.max(5, Math.min(60, parseInt(val, 10) || 30));
+    const lbl = document.getElementById("val-breach-freq");
+    if (lbl) lbl.textContent = `${breachIntervalSec}S`;
+    if (isBreachRunning) {
+      clearInterval(breachCycleTimer);
+      breachCycleTimer = setInterval(() => window.runBreachCycleStep?.(), breachIntervalSec * 1000);
+      fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/br_${Date.now()}`, {
+        method: "PUT",
+        headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ msgtype: "m.notice", body: `[GAMEMODE|BREACH|1|${breachIntervalSec}]` })
+      }).catch(() => {});
+    }
+  };
+  window.handleIncomingBreachMode = function(active, intervalSec, hostName) {
+    const banner = document.getElementById("gtag-breach-banner");
+    const btn = document.getElementById("btn-gamemode-breach");
+    clearInterval(breachCountdownTimer);
+
+    if (active) {
+      const cycleLen = intervalSec || 30;
+      breachSecondsLeft = cycleLen;
+      banner?.classList.remove("gtag-hidden");
+      if (btn) { btn.textContent = "BREACH: ON"; btn.classList.add("active"); }
+      playTerminalSfx?.("error");
+      triggerModToast("⚠ BREACH MODE ACTIVE", `${hostName.toUpperCase()} STARTED BREACH! RANDOM HACK EVERY ${cycleLen}S.`);
+      breachCountdownTimer = setInterval(() => {
+        breachSecondsLeft = breachSecondsLeft <= 1 ? cycleLen : breachSecondsLeft - 1;
+        const lbl = document.getElementById("breach-banner-text");
+        if (lbl) lbl.textContent = `⚠ BREACH MODE // NEXT RANDOM HACK IN ${breachSecondsLeft}S`;
+      }, 1000);
+    } else {
+      isBreachRunning = false;
+      clearInterval(breachCycleTimer);
+      banner?.classList.add("gtag-hidden");
+      if (btn) { btn.textContent = "BREACH: OFF"; btn.classList.remove("active"); }
+      window.clearAllIncomingHacks?.();
+      triggerModToast("BREACH ENDED", "ALL BREACH HACKS CLEARED.");
+    }
+  };
+
+  window.toggleBreachGameMode = async function() {
+    if (!accessToken) return triggerModToast("VIP ONLY", "ELEMENT ACCOUNT REQUIRED!");
+    if (!backendRandomRoomId) return triggerModToast("OFFLINE", "CONNECT TO CHAT FIRST!");
+
+    isBreachRunning = !isBreachRunning;
+    clearInterval(breachCycleTimer);
+
+    const sendNotice = (msg) => fetch(`${homeserver}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/br_${Date.now()}_${Math.random().toString(36).slice(2, 5)}`, {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${accessToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "m.notice", body: msg })
+    }).catch(() => {});
+
+    await sendNotice(`[GAMEMODE|BREACH|${isBreachRunning ? 1 : 0}|${breachIntervalSec}]`);
+
+    if (isBreachRunning) {
+      const pool = ["screen", "movement", "invert", "hud"];
+      window.runBreachCycleStep = async () => {
+        if (!isBreachRunning) return;
+        await sendNotice("[HACK|ALL|clear|0]");
+        const choices = pool.filter(h => h !== currentBreachHack);
+        currentBreachHack = choices[Math.floor(Math.random() * choices.length)];
+        setTimeout(() => { if (isBreachRunning) sendNotice(`[HACK|ALL|${currentBreachHack}|1]`); }, 350);
+      };
+      window.runBreachCycleStep();
+      breachCycleTimer = setInterval(() => window.runBreachCycleStep(), breachIntervalSec * 1000);
+    } else {
+      await sendNotice("[HACK|ALL|clear|0]");
+    }
+  };
+
+  const HACK_SECRET_CODE = "elsd6932";
+  let isHackUnlocked = sessionStorage.getItem("gtag_hack_unlocked") === "1";
+  let selectedHackTarget = "";
+  const targetHackStates = new Map();
+  const targetHudStates = new Map();
   let activePuppetTarget = "";
   const puppetHeldKeys = new Set();
   let lastPuppetSendTs = 0;
@@ -643,6 +893,12 @@ document.addEventListener("DOMContentLoaded", () => {
       const btn = document.getElementById(`hack-btn-${k}`);
       if (btn) btn.classList.toggle("active", Boolean(st[k]));
     });
+
+    const hudSt = targetHudStates.get(selectedHackTarget) || { leaderboard: true, keystrokes: false, hudhint: true, mirrorview: false, invert: false };
+    ["leaderboard", "keystrokes", "hudhint", "mirrorview", "invert"].forEach(k => {
+      const hBtn = document.getElementById(`hack-hud-${k}`);
+      if (hBtn) hBtn.classList.toggle("active", Boolean(hudSt[k]));
+    });
   };
 
   window.selectHackTarget = function(name) {
@@ -651,6 +907,25 @@ document.addEventListener("DOMContentLoaded", () => {
     window.renderHackTargetList();
   };
 
+  window.triggerRemoteHudElement = async function(modKey) {
+    if (!isHackUnlocked) return;
+    const tok = accessToken || guestToken;
+    const srv = accessToken ? homeserver : FALLBACK_SERVER;
+    if (!tok || !backendRandomRoomId) return triggerModToast("OFFLINE", "CONNECT TO CHAT/GUEST FIRST!");
+
+    const hudSt = targetHudStates.get(selectedHackTarget) || { leaderboard: true, keystrokes: false, hudhint: true, mirrorview: false, invert: false };
+    hudSt[modKey] = !hudSt[modKey];
+    targetHudStates.set(selectedHackTarget, hudSt);
+    window.renderHackTargetList();
+    playTerminalSfx?.("send");
+
+    const payload = `[HUDHACK|${selectedHackTarget}|${modKey}|${hudSt[modKey] ? 1 : 0}]`;
+    await fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/hd_${Date.now()}`, {
+      method: "PUT",
+      headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
+      body: JSON.stringify({ msgtype: "m.notice", body: payload })
+    }).catch(() => {});
+  };
   window.triggerRemoteHack = async function(effect) {
     if (!isHackUnlocked) return;
     const tok = accessToken || guestToken;
@@ -751,6 +1026,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
   function handleLogout(customMsg = "SIGNED OUT.") {
     window.stopPuppetControl();
+    if (isBreachRunning) window.toggleBreachGameMode();
     endSessionBeacon(true);
     accessToken = ""; userId = ""; guestToken = ""; guestBotId = "";
     syncToken = ""; isSyncing = false; isGuestMode = false; guestName = "";
