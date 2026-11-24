@@ -29,14 +29,14 @@ document.addEventListener("DOMContentLoaded", () => {
   let sidebarRooms = [];
   let toastTimeout = null;
 
-  // --- CUSTOM WEBRTC VOICE CHAT STATE (#vc) ---
+  // --- CUSTOM WEBRTC + ELEMENT CALL VOICE STATE (#vc) ---
   let localAudioStream = null;
   let vcJoined = false;
   let vcMuted = false;
   let micAnalyserInterval = null;
-  const peerConnections = new Map(); // senderUserId -> RTCPeerConnection
-  const remoteAudioEls = new Map();  // senderUserId -> HTMLAudioElement
-  const activeVcMembers = new Map(); // displayUser -> lastHeartbeatMs
+  const peerConnections = new Map();
+  const remoteAudioEls = new Map();
+  const activeVcMembers = new Map();
   const ICE_CONFIG = { iceServers: [{ urls: "stun:://google.com" }] };
 
   // --- ONLINE PLAYTIME TRACKING (ZERO CHAT MESSAGES) ---
@@ -52,6 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   function formatDisplayName(rawMatrixId) {
+    if (!rawMatrixId) return "MONKE";
     const clean = rawMatrixId.split(":").at(0).replace(/^@/, "");
     return /^\d+$/.test(clean) ? `MONKE_${clean.slice(-4)}` : clean;
   }
@@ -74,7 +75,7 @@ document.addEventListener("DOMContentLoaded", () => {
     ];
 
     onlinePlayers.forEach((info, name) => {
-      if (now - info.lastSeen > 60000) return;
+      if (name === myName || now - info.lastSeen > 60000) return;
       const liveElapsed = Math.floor((now - info.lastSeen) / 1000);
       entries.push({
         name,
@@ -93,7 +94,6 @@ document.addEventListener("DOMContentLoaded", () => {
       return `<div class="${cls}"><span>${label}</span><span>${formatPlaytime(entry.seconds)}</span></div>`;
     }).join("");
 
-    // Also refresh VC participant list
     renderVcUsersList();
   }, 1000);
 
@@ -162,21 +162,22 @@ document.addEventListener("DOMContentLoaded", () => {
     msgBox.appendChild(row);
     msgBox.scrollTop = msgBox.scrollHeight;
   }
-  // --- CUSTOM WEBRTC VOICE ENGINE (AUDIO ONLY, ZERO IFRAME) ---
+  // --- CUSTOM WEBRTC + ELEMENT CALL VOICE ENGINE (#vc) ---
   function renderVcUsersList() {
     const listEl = document.getElementById("vc-users-list");
     const countEl = document.getElementById("vc-peer-count");
     if (!listEl) return;
 
     const now = Date.now();
+    const me = formatDisplayName(userId || guestUserId || "YOU");
     const rows = [];
+
     if (vcJoined) {
-      const me = formatDisplayName(userId || "YOU");
       rows.push(`<div class="vc-user-row"><span>${me} (YOU)</span><span>${vcMuted ? "MUTED" : "LIVE"}</span></div>`);
     }
 
     activeVcMembers.forEach((lastTs, name) => {
-      if (now - lastTs > 45000) return;
+      if (name === me || now - lastTs > 45000) return;
       rows.push(`<div class="vc-user-row"><span>${name}</span><span>CONNECTED</span></div>`);
     });
 
@@ -245,7 +246,7 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function handleIncomingVoiceSignal(senderId, content) {
-    if (!vcJoined || senderId === userId) return;
+    if (!vcJoined || senderId === userId || senderId === guestUserId) return;
     if (content.to && content.to !== userId && content.to !== "*") return;
 
     const sig = content.signal;
@@ -294,7 +295,6 @@ document.addEventListener("DOMContentLoaded", () => {
       if (muteBtn) { muteBtn.disabled = false; muteBtn.textContent = "MUTE: OFF"; }
       if (leaveBtn) leaveBtn.disabled = false;
 
-      // Live mic level meter
       const ctx = new (window.AudioContext || window.webkitAudioContext)();
       const src = ctx.createMediaStreamSource(localAudioStream);
       const analyser = ctx.createAnalyser();
@@ -320,6 +320,11 @@ document.addEventListener("DOMContentLoaded", () => {
       await sendSilentPresence();
       await sendVoiceSignal("*", { type: "hello" });
       renderVcUsersList();
+
+      // Open Element's actual #stump-network-vc call in a compact popup window
+      const displayName = formatDisplayName(userId || "MONKE");
+      const callUrl = `https://element.io{encodeURIComponent(displayName)}`;
+      window.gtagVcPopup = window.open(callUrl, "StumpNetworkVC", "width=420,height=600,menubar=no,toolbar=no");
     } catch (err) {
       if (typeof playTerminalSfx === "function") playTerminalSfx("error");
       if (statusEl) statusEl.textContent = `MIC ERROR: ${err.message}`;
@@ -332,6 +337,10 @@ document.addEventListener("DOMContentLoaded", () => {
     vcJoined = false;
     vcMuted = false;
     clearInterval(micAnalyserInterval);
+
+    if (window.gtagVcPopup && !window.gtagVcPopup.closed) {
+      window.gtagVcPopup.close();
+    }
 
     if (localAudioStream) {
       localAudioStream.getTracks().forEach(t => t.stop());
@@ -474,6 +483,16 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!loginRes.ok || !loginData.access_token) {
         throw new Error(loginData.error || `Login rejected (${loginRes.status})`);
       }
+
+      // Wipe old guest session so you never appear twice on leaderboard or VC
+      if (guestUserId) {
+        onlinePlayers.delete(formatDisplayName(guestUserId));
+        activeVcMembers.delete(formatDisplayName(guestUserId));
+      }
+      guestToken = "";
+      guestUserId = "";
+      sessionStorage.removeItem("gtag_lb_guest_token");
+      sessionStorage.removeItem("gtag_lb_guest_user");
 
       accessToken = loginData.access_token;
       userId = loginData.user_id;
