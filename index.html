@@ -1,266 +1,205 @@
 <!DOCTYPE html>
-<html lang="en-us">
+<html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Gorilla Tag Web</title>
-  <link href="https://googleapis.com" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=130">
+  <link rel="preconnect" href="https://googleapis.com" />
+  <link href="https://googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-
-  <!-- Optional CRT Scanline, Crosshair, Vignette & Cinematic Overlays -->
-  <div id="crt-overlay" class="gtag-hidden"></div>
-  <div id="gtag-crosshair" class="gtag-hidden">+</div>
-  <div id="gtag-vignette" class="gtag-hidden"></div>
-  <div id="gtag-cinematic" class="gtag-hidden">
-    <div class="gtag-bar-top"></div>
-    <div class="gtag-bar-bottom"></div>
-  </div>
-
-  <!-- Unity Container -->
   <div id="unity-container">
-    <canvas id="unity-canvas" tabindex="-1"></canvas>
+    <canvas id="unity-canvas"></canvas>
     <div id="gtag-loading">
       <div id="gtag-load-status">GORILLA OS BOOTING...</div>
       <div class="gtag-bar-outer"><div id="gtag-bar-inner"></div></div>
     </div>
   </div>
 
-  <!-- On-Screen Keybind Reminder -->
-  <div id="gtag-hud-hint">[TAB] TERMINAL | [T] CHAT | [B] SOUNDS</div>
+  <!-- Visual Mod Overlays -->
+  <div id="crt-overlay" class="gtag-hidden"></div>
+  <div id="gtag-crosshair" class="gtag-hidden">+</div>
+  <div id="gtag-vignette" class="gtag-hidden"></div>
+  <div id="gtag-speedlines" class="gtag-hidden"></div>
+  <div id="gtag-cinematic" class="gtag-hidden">
+    <div class="gtag-bar-top"></div>
+    <div class="gtag-bar-bottom"></div>
+  </div>
 
-  <!-- Gorilla OS Notification Toast (Bottom-Right) -->
+  <!-- Draggable HUD Modules -->
+  <div id="gtag-keystrokes" class="gtag-hidden" title="Drag to move">
+    <div></div><div class="gtag-key-cap" data-key="W">W</div><div></div>
+    <div class="gtag-key-cap" data-key="A">A</div><div class="gtag-key-cap" data-key="S">S</div><div class="gtag-key-cap" data-key="D">D</div>
+  </div>
+
+  <div id="gtag-hud-hint" title="Drag to move">[TAB] TERM | [T] CHAT | [B] SFX</div>
+
+  <div id="gtag-leaderboard" title="Drag to move">
+    <div class="gtag-lb-header"><span>ONLINE MONKES</span><span id="lb-count">1 ONLINE</span></div>
+    <div id="lb-list" class="gtag-lb-list"></div>
+  </div>
+
+  <div id="gtag-hud-edit-banner" class="gtag-hidden">
+    <span>DRAG ANY HUD MODULE TO REPOSITION</span>
+    <button class="gtag-btn" onclick="toggleHudEditMode(false)">DONE</button>
+  </div>
+
   <div id="gtag-toast" class="gtag-hidden">
-    <div id="gtag-toast-title">NEW MESSAGE // [T] TO REPLY</div>
+    <div id="gtag-toast-title">GORILLA OS</div>
     <div id="gtag-toast-body"></div>
   </div>
 
-  <!-- Gorilla OS Online Playtime Leaderboard (Top-Right) -->
-  <div id="gtag-leaderboard" class="gtag-hidden">
-    <div class="gtag-lb-header">
-      <span>ONLINE MONKES</span>
-      <span id="lb-count">1 ONLINE</span>
-    </div>
-    <div id="lb-list" class="gtag-lb-list">
-      <div class="lb-row self-entry"><span>#1 YOU</span><span>00:00</span></div>
-    </div>
-  </div>
-
-  <!-- Custom Gorilla Tag Stump Computer Overlay -->
+  <!-- Gorilla OS Terminal -->
   <div id="gtag-overlay" class="gtag-hidden">
     <div class="gtag-terminal">
       <div class="gtag-header">
-        <span>GORILLA OS v6.5 // [TAB] CLOSE</span>
-        <div>
-          <button id="btn-tab-chat" class="gtag-btn active" type="button" onclick="switchTab('chat')">CHAT</button>
-          <button id="btn-tab-sounds" class="gtag-btn" type="button" onclick="switchTab('sounds')">SOUNDS</button>
-          <button id="btn-tab-mods" class="gtag-btn" type="button" onclick="switchTab('mods')">MODS</button>
+        <span>GORILLA OS v7.0</span>
+        <div style="display:flex; gap:5px; flex-wrap:wrap;">
+          <button id="btn-tab-chat" class="gtag-btn active" onclick="switchTab('chat')">CHAT</button>
+          <button id="btn-tab-sounds" class="gtag-btn" onclick="switchTab('sounds')">SOUNDS</button>
+          <button id="btn-tab-mods" class="gtag-btn" onclick="switchTab('mods')">MODS</button>
+          <button id="btn-tab-settings" class="gtag-btn" onclick="switchTab('settings')">SETTINGS</button>
+          <button id="btn-tab-about" class="gtag-btn" onclick="switchTab('about')">ABOUT</button>
         </div>
       </div>
-
-      <!-- Messaging & Custom Voice Interface (Stump Network Only) -->
+      <!-- TAB 1: CHAT -->
       <div id="tab-chat">
-        <!-- Element Sign-In Form -->
-        <div id="matrix-login-box" style="padding: 12px 0;">
-          <div style="font-size: 9px; color: #ffaa00; margin-bottom: 12px; line-height: 1.6;">
-            SIGN IN WITH ELEMENT TO JOIN STUMP NETWORK
+        <div id="matrix-login-box" class="gtag-panel-box">
+          <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">SIGN IN WITH ELEMENT FOR VIP MODS & STUMP CHAT</div>
+          <div id="matrix-login-error" style="font-size:7px; margin-bottom:10px;"></div>
+          <div class="gtag-input-row" style="margin-bottom:8px;">
+            <span style="font-size:8px;">USER:</span>
+            <input id="matrix-user-input" type="text" placeholder="@user:matrix.org" />
           </div>
-          <div class="gtag-input-row" style="margin-bottom: 10px;">
-            <span>USER:</span>
-            <input type="text" id="matrix-user-input" placeholder="@username:matrix.org" autocomplete="off" />
+          <div class="gtag-input-row" style="margin-bottom:12px;">
+            <span style="font-size:8px;">PASS:</span>
+            <input id="matrix-pass-input" type="password" placeholder="••••••••" />
           </div>
-          <div class="gtag-input-row" style="margin-bottom: 14px;">
-            <span>PASS:</span>
-            <input type="password" id="matrix-pass-input" placeholder="********" autocomplete="off" />
+          <div style="display:flex; gap:8px;">
+            <button id="matrix-login-btn" class="gtag-btn">SIGN IN & JOIN</button>
+            <a href="https://element.io" target="_blank" class="gtag-btn" style="text-decoration:none;">CREATE ACCOUNT</a>
           </div>
-          <div style="display:flex; gap:8px; align-items:center;">
-            <button id="matrix-login-btn" class="gtag-btn" type="button">SIGN IN &amp; JOIN</button>
-            <a href="https://element.io" target="_blank" style="font-size:8px; color:#33ff33; text-decoration:none;">[CREATE ACCOUNT]</a>
-          </div>
-          <div id="matrix-login-error" style="font-size:8px; color:#ff4444; margin-top:10px; line-height:1.5;"></div>
         </div>
 
-        <!-- Live Stump Network Channels & Main Panel -->
         <div id="matrix-chat-box" class="gtag-hidden">
-          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; font-size:8px; color:#888;">
+          <div style="display:flex; justify-content:space-between; align-items:center; font-size:8px; margin-bottom:8px;">
             <span id="matrix-room-label">STUMP NETWORK // #GENERAL</span>
-            <div>
-              <a href="https://matrix.to" target="_blank" style="color:#33ff33; text-decoration:none; margin-right:8px;">[ELEMENT]</a>
-              <button id="matrix-logout-btn" class="gtag-btn" type="button" style="font-size:7px; padding:3px 5px;">LOGOUT</button>
-            </div>
+            <button id="matrix-logout-btn" class="gtag-btn" style="font-size:7px;">LOGOUT</button>
           </div>
-
           <div class="gtag-chat-layout">
-            <!-- Left Channel Selector Sidebar (#general and #vc) -->
             <div class="gtag-room-sidebar">
-              <div class="gtag-sidebar-head">
-                <span>STUMP NET</span>
-                <button id="btn-add-room" type="button" title="Add Custom Channel">+</button>
-              </div>
+              <div class="gtag-sidebar-head"><span>CHANNELS</span><button id="btn-add-room" title="Join Room">+</button></div>
               <div id="room-sidebar-list"></div>
             </div>
-
-            <!-- Right Text Chat Panel -->
-            <div id="stump-text-panel" class="gtag-chat-main">
-              <div id="chat-messages">
-                <div class="chat-line" style="color:#888;">* CONNECTED TO STUMP NETWORK *</div>
-              </div>
+            <div class="gtag-chat-main">
+              <div id="chat-messages"></div>
               <div class="gtag-input-row">
                 <span>&gt;</span>
-                <input type="text" id="chat-input" placeholder="MESSAGE..." maxlength="150" autocomplete="off" />
-                <button id="chat-send-btn" class="gtag-btn" type="button">SEND</button>
-              </div>
-            </div>
-
-            <!-- Right Custom Gorilla OS Voice Relay Panel (#vc) -->
-            <div id="stump-vc-panel" class="gtag-chat-main gtag-hidden">
-              <div class="gtag-vc-box">
-                <div class="gtag-vc-status-bar">
-                  <span id="vc-status-text">VOICE RELAY: DISCONNECTED</span>
-                  <span id="vc-peer-count">0 IN VC</span>
-                </div>
-
-                <!-- Live Voice Participants List -->
-                <div id="vc-users-list" class="gtag-vc-users">
-                  <div style="color:#888;">NO ONE IN VOICE CHANNEL YET.</div>
-                </div>
-
-                <!-- Live Mic Input Level Meter -->
-                <div class="gtag-vc-meter-wrap">
-                  <span style="font-size:7px;">MIC LEVEL:</span>
-                  <div class="gtag-vc-meter-outer">
-                    <div id="vc-mic-bar"></div>
-                  </div>
-                </div>
-
-                <!-- Voice Controls -->
-                <div class="gtag-vc-controls">
-                  <button id="btn-vc-join" class="gtag-btn" type="button">JOIN VOICE</button>
-                  <button id="btn-vc-mute" class="gtag-btn" type="button" disabled>MUTE: OFF</button>
-                  <button id="btn-vc-leave" class="gtag-btn" type="button" disabled>LEAVE</button>
-                </div>
+                <input id="chat-input" type="text" placeholder="TYPE MESSAGE..." />
+                <button id="chat-send-btn" class="gtag-btn">SEND</button>
               </div>
             </div>
           </div>
         </div>
       </div>
-      <!-- Gorilla Tag Retro Soundboard -->
+
+      <!-- TAB 2: SOUNDS -->
       <div id="tab-sounds" class="gtag-hidden">
-        <div style="font-size:8px; color:#888; margin-bottom:12px;">
-          MONKE SOUNDBOARD // CLICK OR PRESS [1-6] WHEN OPEN
-        </div>
-        <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:10px;">
-          <button class="gtag-btn" type="button" style="padding:14px 8px;" onclick="playMonkeSound('tag')">TAG SLAP!</button>
-          <button class="gtag-btn" type="button" style="padding:14px 8px;" onclick="playMonkeSound('roundstart')">ROUND START</button>
-          <button class="gtag-btn" type="button" style="padding:14px 8px;" onclick="playMonkeSound('monke')">OOH-OOH-AAH</button>
-          <button class="gtag-btn" type="button" style="padding:14px 8px;" onclick="playMonkeSound('lava')">LAVA ALERT</button>
-          <button class="gtag-btn" type="button" style="padding:14px 8px;" onclick="playMonkeSound('computer')">STUMP BEEP</button>
-          <button class="gtag-btn" type="button" style="padding:14px 8px;" onclick="playMonkeSound('win')">LAST MONKE</button>
+        <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">MONKE SOUNDBOARD // PRESS [1-6] OR [7-9] FOR ELEMENT VIP</div>
+        <div class="gtag-mod-grid" style="max-height:260px;">
+          <button class="gtag-btn" onclick="playMonkeSound('tag')">[1] TAG SLAP!</button>
+          <button class="gtag-btn" onclick="playMonkeSound('roundstart')">[2] ROUND START</button>
+          <button class="gtag-btn" onclick="playMonkeSound('monke')">[3] OOH-OOH-AAH</button>
+          <button class="gtag-btn" onclick="playMonkeSound('lava')">[4] LAVA ALERT</button>
+          <button class="gtag-btn" onclick="playMonkeSound('computer')">[5] STUMP BEEP</button>
+          <button class="gtag-btn" onclick="playMonkeSound('win')">[6] LAST MONKE</button>
+          <button class="gtag-btn" onclick="playMonkeSound('banshee')">[7] [★] BANSHEE SCREAM</button>
+          <button class="gtag-btn" onclick="playMonkeSound('airhorn')">[8] [★] STUMP AIRHORN</button>
+          <button class="gtag-btn" onclick="playMonkeSound('shinyrock')">[9] [★] SHINY ROCK CHIME</button>
         </div>
       </div>
-
-      <!-- Visual & HUD Mods Tab -->
+      <!-- TAB 3: MODS -->
       <div id="tab-mods" class="gtag-hidden">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-          <span style="font-size:8px; color:#888;">GORILLA OS MOD MENU v6.5</span>
+        <div style="display:flex; justify-content:space-between; align-items:center; font-size:8px; margin-bottom:8px;">
+          <span>GORILLA OS MOD MENU v7.0</span>
           <div style="display:flex; gap:6px;">
-            <button id="btn-save-mods" class="gtag-btn" type="button" style="font-size:7px; padding:4px 6px;" onclick="saveModConfig()">SAVE CONFIG</button>
-            <button id="btn-reset-mods" class="gtag-btn" type="button" style="font-size:7px; padding:4px 6px;" onclick="resetAllMods()">RESET</button>
+            <button class="gtag-btn" style="font-size:7px;" onclick="saveModConfig()">SAVE CONFIG</button>
+            <button class="gtag-btn" style="font-size:7px;" onclick="resetAllMods()">RESET</button>
           </div>
         </div>
-
-        <!-- Sliders: FOV Zoom, Saturation, Brightness -->
         <div class="gtag-slider-box">
-          <div class="gtag-slider-row">
-            <span>FOV ZOOM: <span id="val-fov">1.00x</span></span>
-            <input type="range" id="slider-fov" min="1.0" max="1.6" step="0.05" value="1.0" oninput="updateSliderMod('fov', this.value)">
-          </div>
-          <div class="gtag-slider-row">
-            <span>SATURATION: <span id="val-sat">100%</span></span>
-            <input type="range" id="slider-sat" min="0" max="300" step="10" value="100" oninput="updateSliderMod('sat', this.value)">
-          </div>
-          <div class="gtag-slider-row">
-            <span>BRIGHTNESS: <span id="val-bright">100%</span></span>
-            <input type="range" id="slider-bright" min="50" max="220" step="10" value="100" oninput="updateSliderMod('bright', this.value)">
-          </div>
+          <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>FOV ZOOM</span><span id="val-fov">1.00x</span></div><input id="slider-fov" type="range" min="0.7" max="1.6" step="0.05" value="1.0" oninput="updateSliderMod('fov', this.value)"></div>
+          <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>CONTRAST</span><span id="val-contrast">100%</span></div><input id="slider-contrast" type="range" min="50" max="200" step="5" value="100" oninput="updateSliderMod('contrast', this.value)"></div>
+          <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>SATURATION</span><span id="val-sat">100%</span></div><input id="slider-sat" type="range" min="0" max="250" step="5" value="100" oninput="updateSliderMod('sat', this.value)"></div>
+          <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>BRIGHTNESS</span><span id="val-bright">100%</span></div><input id="slider-bright" type="range" min="40" max="200" step="5" value="100" oninput="updateSliderMod('bright', this.value)"></div>
+          <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>GAME VOLUME</span><span id="val-gamevol">100%</span></div><input id="slider-gamevol" type="range" min="0" max="100" step="1" value="100" oninput="updateSliderMod('gameVol', this.value)"></div>
+          <div class="gtag-slider-row"><div class="gtag-slider-label-wrap"><span>MENU VOLUME</span><span id="val-menuvol">100%</span></div><input id="slider-menuvol" type="range" min="0" max="100" step="1" value="100" oninput="updateSliderMod('menuVol', this.value)"></div>
         </div>
-
-        <!-- Toggleable Mods Grid -->
         <div class="gtag-mod-grid">
-          <button id="mod-leaderboard" class="gtag-btn" type="button" onclick="toggleMod('leaderboard')">LEADERBOARD: ON</button>
-          <button id="mod-termsfx" class="gtag-btn" type="button" onclick="toggleMod('termsfx')">TERMINAL SFX: ON</button>
-          <button id="mod-nightvision" class="gtag-btn" type="button" onclick="toggleMod('nightvision')">NIGHT VISION: OFF</button>
-          <button id="mod-crt" class="gtag-btn" type="button" onclick="toggleMod('crt')">CRT SCANLINES: OFF</button>
-          <button id="mod-crosshair" class="gtag-btn" type="button" onclick="toggleMod('crosshair')">CROSSHAIR: OFF</button>
-          <button id="mod-fps" class="gtag-btn" type="button" onclick="toggleMod('fps')">FPS COUNTER: OFF</button>
-          <button id="mod-rainbow" class="gtag-btn" type="button" onclick="toggleMod('rainbow')">RGB MONKE: OFF</button>
-          <button id="mod-deepfried" class="gtag-btn" type="button" onclick="toggleMod('deepfried')">DEEP FRIED: OFF</button>
-          <button id="mod-invert" class="gtag-btn" type="button" onclick="toggleMod('invert')">X-RAY INVERT: OFF</button>
-          <button id="mod-retro" class="gtag-btn" type="button" onclick="toggleMod('retro')">GAMEBOY MODE: OFF</button>
-          <button id="mod-vignette" class="gtag-btn" type="button" onclick="toggleMod('vignette')">TUNNEL VISION: OFF</button>
-          <button id="mod-cinematic" class="gtag-btn" type="button" onclick="toggleMod('cinematic')">CINEMATIC BARS: OFF</button>
-          <button class="gtag-btn" type="button" style="grid-column: span 2; color:#ffaa00; border-color:#ffaa00;" onclick="clearUnityCosmetics()">UNSTUCK HAT</button>
+          <button id="mod-leaderboard" class="gtag-btn" onclick="toggleMod('leaderboard')">LEADERBOARD: ON</button>
+          <button id="mod-termsfx" class="gtag-btn" onclick="toggleMod('termsfx')">TERMINAL SFX: ON</button>
+          <button id="mod-nightvision" class="gtag-btn" onclick="toggleMod('nightvision')">NIGHT VISION: OFF</button>
+          <button id="mod-lavavision" class="gtag-btn" onclick="toggleMod('lavavision')">LAVA VISION: OFF</button>
+          <button id="mod-blueprint" class="gtag-btn" onclick="toggleMod('blueprint')">BLUEPRINT WIRE: OFF</button>
+          <button id="mod-crt" class="gtag-btn" onclick="toggleMod('crt')">CRT SCANLINES: OFF</button>
+          <button id="mod-crosshair" class="gtag-btn" onclick="toggleMod('crosshair')">CROSSHAIR: OFF</button>
+          <button id="mod-fps" class="gtag-btn" onclick="toggleMod('fps')">FPS COUNTER: OFF</button>
+          <button id="mod-sessionclock" class="gtag-btn" onclick="toggleMod('sessionclock')">SESSION CLOCK: OFF</button>
+          <button id="mod-keystrokes" class="gtag-btn" onclick="toggleMod('keystrokes')">KEYSTROKE HUD: OFF</button>
+          <button id="mod-speedlines" class="gtag-btn" onclick="toggleMod('speedlines')">SPEED LINES: OFF</button>
+          <button id="mod-rainbow" class="gtag-btn" onclick="toggleMod('rainbow')">RGB MONKE: OFF</button>
+          <button id="mod-deepfried" class="gtag-btn" onclick="toggleMod('deepfried')">DEEP FRIED: OFF</button>
+          <button id="mod-invert" class="gtag-btn" onclick="toggleMod('invert')">X-RAY INVERT: OFF</button>
+          <button id="mod-retro" class="gtag-btn" onclick="toggleMod('retro')">GAMEBOY MODE: OFF</button>
+          <button id="mod-vignette" class="gtag-btn" onclick="toggleMod('vignette')">TUNNEL VISION: OFF</button>
+          <button id="mod-cinematic" class="gtag-btn" onclick="toggleMod('cinematic')">CINEMATIC BARS: OFF</button>
+          <button id="mod-mirrorview" class="gtag-btn" onclick="toggleMod('mirrorview')">MIRROR WORLD: OFF</button>
+          <button id="mod-rgbcrosshair" class="gtag-btn" onclick="toggleMod('rgbcrosshair')">[★] RGB RETICLE: OFF</button>
+          <button id="mod-goldenui" class="gtag-btn" onclick="toggleMod('goldenui')">[★] GOLD TERMINAL: OFF</button>
+          <button id="mod-chatnotify" class="gtag-btn" onclick="toggleMod('chatnotify')">[★] CHAT PING SFX: OFF</button>
+          <button id="mod-vhsglitch" class="gtag-btn" onclick="toggleMod('vhsglitch')">[★] VHS TRACKING: OFF</button>
+          <button id="mod-ultrafov" class="gtag-btn" onclick="toggleMod('ultrafov')">[★] QUAKE PRO FOV: OFF</button>
+          <button id="mod-stumpbeacon" class="gtag-btn" onclick="toggleMod('stumpbeacon')">[★] RANDOM ROOM PING: OFF</button>
+          <button class="gtag-btn" onclick="clearUnityCosmetics()">UNSTUCK HAT</button>
         </div>
       </div>
 
+      <!-- TAB 4: SETTINGS -->
+      <div id="tab-settings" class="gtag-hidden">
+        <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">KEYBINDS &amp; HUD MODULE LAYOUT</div>
+        <div class="gtag-panel-box">
+          <div class="gtag-setting-row"><span>TOGGLE TERMINAL</span><button id="bind-btn-toggle" class="gtag-btn" onclick="startRebind('toggle')">[TAB]</button></div>
+          <div class="gtag-setting-row"><span>QUICK OPEN CHAT</span><button id="bind-btn-chat" class="gtag-btn" onclick="startRebind('chat')">[T]</button></div>
+          <div class="gtag-setting-row"><span>QUICK SOUNDBOARD</span><button id="bind-btn-sounds" class="gtag-btn" onclick="startRebind('sounds')">[B]</button></div>
+          <div class="gtag-setting-row">
+            <span>ON-SCREEN HUD MODULES</span>
+            <div style="display:flex; gap:6px;">
+              <button id="btn-edit-hud" class="gtag-btn" onclick="toggleHudEditMode()">MOVE HUD MODULES</button>
+              <button class="gtag-btn" onclick="resetHudPositions()">RESET POS</button>
+            </div>
+          </div>
+        </div>
+        <button class="gtag-btn" style="font-size:7px;" onclick="resetKeybinds()">RESET DEFAULT KEYBINDS</button>
+      </div>
+
+      <!-- TAB 5: ABOUT -->
+      <div id="tab-about" class="gtag-hidden">
+        <div style="font-size:8px; margin-bottom:10px; color:#ffaa00;">SYSTEM INFORMATION // GORILLA OS</div>
+        <div class="gtag-panel-box">
+          <div class="gtag-about-line"><span class="gtag-about-highlight">OS VERSION:</span> GORILLA OS v7.0 (WEB EDITION)</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">ACCOUNT STATUS:</span> <span id="about-account-status">GUEST</span></div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">RELAY ROOM:</span> #stump-network-random:matrix.org</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">ELEMENT PERKS:</span> UNLOCKS 6 VIP [★] MODS, VIP SOUNDS [7-9], GOLD TERMINAL &amp; LIVE MONKE RADAR.</div>
+          <div class="gtag-about-line"><span class="gtag-about-highlight">TIP:</span> ENABLE KEYSTROKE HUD OR LEADERBOARD IN MODS, THEN USE SETTINGS -&gt; MOVE HUD MODULES TO DRAG THEM ANYWHERE.</div>
+        </div>
+      </div>
     </div>
   </div>
 
-  <!-- Separate Modular Scripts -->
-  <script src="ui-keybinds.js?v=130"></script>
-  <script src="soundboard.js?v=130"></script>
-  <script src="chat.js?v=160"></script>
-
-  <!-- Unity 8-Part Loader -->
-  <script>
-    const buildUrl = "Build";
-    const statusText = document.getElementById("gtag-load-status");
-    const progressBar = document.getElementById("gtag-bar-inner");
-
-    async function mergeDataParts() {
-      const totalParts = 8;
-      const chunks = [];
-      for (let i = 1; i <= totalParts; i++) {
-        statusText.textContent = `LOADING DATA PART ${i}/${totalParts}...`;
-        const response = await fetch(`${buildUrl}/gtagwebR2.data.unityweb.part${i}`);
-        if (!response.ok) throw new Error(`Missing part ${i} (${response.status})`);
-        chunks.push(await response.arrayBuffer());
-        progressBar.style.width = ((i / totalParts) * 60) + "%";
-      }
-      statusText.textContent = "ASSEMBLING GORILLA DATA...";
-      return URL.createObjectURL(new Blob(chunks, { type: "application/octet-stream" }));
-    }
-
-    async function bootUnity() {
-      try {
-        const mergedDataUrl = await mergeDataParts();
-        const config = {
-          dataUrl: mergedDataUrl,
-          frameworkUrl: `${buildUrl}/gtagwebR2.framework.js.unityweb`,
-          codeUrl: `${buildUrl}/gtagwebR2.wasm.unityweb`,
-          streamingAssetsUrl: "StreamingAssets",
-          companyName: "DefaultCompany",
-          productName: "gorilla tag web",
-          productVersion: "1.0",
-        };
-
-        const script = document.createElement("script");
-        script.src = `${buildUrl}/gtagwebR2.loader.js`;
-        script.onload = () => {
-          statusText.textContent = "STARTING ENGINE...";
-          createUnityInstance(document.querySelector("#unity-canvas"), config, (progress) => {
-            progressBar.style.width = (60 + (progress * 40)) + "%";
-          }).then(() => {
-            document.querySelector("#gtag-loading").style.display = "none";
-          }).catch((msg) => alert("Unity Error: " + msg));
-        };
-        document.body.appendChild(script);
-      } catch (err) {
-        statusText.textContent = "BOOT ERROR: " + err.message;
-      }
-    }
-    bootUnity();
-  </script>
+  <script src="soundboard.js"></script>
+  <script src="ui-keybinds.js"></script>
+  <script src="chat.js"></script>
+  <!-- Keep your existing Unity loader script below this line -->
 </body>
 </html>
