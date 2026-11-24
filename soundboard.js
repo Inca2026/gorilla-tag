@@ -1,7 +1,7 @@
-// BUILT-IN WEB AUDIO MONKE SOUNDBOARD & SAVABLE CLIENT MODS
+// BUILT-IN WEB AUDIO MONKE SOUNDBOARD, TERMINAL SFX & SAVABLE CLIENT MODS
 const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
-function playTone(freq, type, duration, delay = 0, slideTo = null) {
+function playTone(freq, type, duration, delay = 0, slideTo = null, vol = 0.22) {
   if (audioCtx.state === 'suspended') audioCtx.resume();
   const osc = audioCtx.createOscillator();
   const gain = audioCtx.createGain();
@@ -12,7 +12,7 @@ function playTone(freq, type, duration, delay = 0, slideTo = null) {
     osc.frequency.exponentialRampToValueAtTime(slideTo, audioCtx.currentTime + delay + duration);
   }
 
-  gain.gain.setValueAtTime(0.25, audioCtx.currentTime + delay);
+  gain.gain.setValueAtTime(vol, audioCtx.currentTime + delay);
   gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + delay + duration);
 
   osc.connect(gain);
@@ -21,6 +21,31 @@ function playTone(freq, type, duration, delay = 0, slideTo = null) {
   osc.start(audioCtx.currentTime + delay);
   osc.stop(audioCtx.currentTime + delay + duration);
 }
+
+// Retro Stump Computer UI Sound Effects
+window.playTerminalSfx = function(sfx) {
+  if (!modConfig.termsfx) return;
+
+  if (sfx === 'open') {
+    playTone(320, 'square', 0.06, 0, 640, 0.14);
+    playTone(640, 'square', 0.08, 0.06, 960, 0.14);
+  } else if (sfx === 'close') {
+    playTone(720, 'square', 0.06, 0, 360, 0.14);
+    playTone(360, 'square', 0.08, 0.06, 180, 0.14);
+  } else if (sfx === 'tab') {
+    playTone(880, 'square', 0.045, 0, 1100, 0.12);
+  } else if (sfx === 'click') {
+    playTone(1050, 'square', 0.035, 0, null, 0.12);
+  } else if (sfx === 'send') {
+    playTone(580, 'triangle', 0.05, 0, 880, 0.15);
+    playTone(880, 'triangle', 0.07, 0.05, 1180, 0.15);
+  } else if (sfx === 'receive') {
+    playTone(740, 'square', 0.05, 0, null, 0.14);
+    playTone(980, 'square', 0.08, 0.06, null, 0.14);
+  } else if (sfx === 'error') {
+    playTone(220, 'sawtooth', 0.12, 0, 140, 0.16);
+  }
+};
 
 function playMonkeSound(sound) {
   if (sound === 'tag') {
@@ -54,7 +79,8 @@ const DEFAULT_MOD_CONFIG = {
   fov: 1.0,
   sat: 100,
   bright: 100,
-  radar: false,
+  leaderboard: true,
+  termsfx: true,
   nightvision: false,
   crt: false,
   crosshair: false,
@@ -68,7 +94,8 @@ const DEFAULT_MOD_CONFIG = {
 };
 
 const MOD_LABELS = {
-  radar: "HIDE/SEEK RADAR",
+  leaderboard: "LEADERBOARD",
+  termsfx: "TERMINAL SFX",
   nightvision: "NIGHT VISION",
   crt: "CRT SCANLINES",
   crosshair: "CROSSHAIR",
@@ -96,7 +123,7 @@ function triggerModToast(title, text) {
   toastTitle.textContent = title;
   toastBody.textContent = text;
   toast.classList.remove("gtag-hidden");
-  playMonkeSound("computer");
+  playTerminalSfx("click");
 
   clearTimeout(window.gtagModToastTimer);
   window.gtagModToastTimer = setTimeout(() => {
@@ -160,7 +187,7 @@ function syncModUI() {
     }
   });
 
-  document.getElementById("gtag-radar")?.classList.toggle("gtag-hidden", !modConfig.radar);
+  document.getElementById("gtag-leaderboard")?.classList.toggle("gtag-hidden", !modConfig.leaderboard);
   document.getElementById("crt-overlay")?.classList.toggle("gtag-hidden", !modConfig.crt);
   document.getElementById("gtag-crosshair")?.classList.toggle("gtag-hidden", !modConfig.crosshair);
   document.getElementById("gtag-vignette")?.classList.toggle("gtag-hidden", !modConfig.vignette);
@@ -183,11 +210,11 @@ function syncModUI() {
     };
     requestAnimationFrame(countFrames);
     fpsInterval = setInterval(() => {
-      hud.textContent = `FPS: ${frameCount} | [TAB] TERMINAL | [T] CHAT | [B] SOUNDS | [R] SYNC`;
+      hud.textContent = `FPS: ${frameCount} | [TAB] TERMINAL | [T] CHAT | [B] SOUNDS`;
       frameCount = 0;
     }, 1000);
   } else if (hud) {
-    hud.textContent = `[TAB] TERMINAL | [T] CHAT | [B] SOUNDS | [R] SPAWN SYNC`;
+    hud.textContent = `[TAB] TERMINAL | [T] CHAT | [B] SOUNDS`;
   }
 
   applyVisualFilters();
