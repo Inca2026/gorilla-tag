@@ -5,7 +5,7 @@
   <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
   <title>Gorilla Tag Web</title>
   <link href="https://googleapis.com" rel="stylesheet">
-  <link rel="stylesheet" href="style.css?v=6">
+  <link rel="stylesheet" href="style.css?v=30">
 </head>
 <body>
 
@@ -31,9 +31,9 @@
       <div class="gtag-header">
         <span>GORILLA OS v2.0 // [TAB] CLOSE</span>
         <div>
-          <button id="btn-tab-chat" class="gtag-btn active" onclick="switchTab('chat')">CHAT</button>
-          <button id="btn-tab-sounds" class="gtag-btn" onclick="switchTab('sounds')">SOUNDS</button>
-          <button id="btn-tab-mods" class="gtag-btn" onclick="switchTab('mods')">MODS</button>
+          <button id="btn-tab-chat" class="gtag-btn active" type="button" onclick="switchTab('chat')">CHAT</button>
+          <button id="btn-tab-sounds" class="gtag-btn" type="button" onclick="switchTab('sounds')">SOUNDS</button>
+          <button id="btn-tab-mods" class="gtag-btn" type="button" onclick="switchTab('mods')">MODS</button>
         </div>
       </div>
 
@@ -53,7 +53,7 @@
             <input type="password" id="matrix-pass-input" placeholder="********" autocomplete="off" />
           </div>
           <div style="display:flex; gap:8px; align-items:center;">
-            <button id="matrix-login-btn" class="gtag-btn" type="button" onclick="loginElementAccount()">SIGN IN &amp; JOIN</button>
+            <button id="matrix-login-btn" class="gtag-btn" type="button">SIGN IN &amp; JOIN</button>
             <a href="https://element.io" target="_blank" style="font-size:8px; color:#33ff33; text-decoration:none;">[CREATE ACCOUNT]</a>
           </div>
           <div id="matrix-login-error" style="font-size:8px; color:#ff4444; margin-top:10px; line-height:1.5;"></div>
@@ -65,7 +65,7 @@
             <span id="matrix-room-label">ROOM: STUMP NETWORK</span>
             <div>
               <a href="https://matrix.to" target="_blank" style="color:#33ff33; text-decoration:none; margin-right:8px;">[ELEMENT]</a>
-              <button class="gtag-btn" type="button" style="font-size:7px; padding:3px 5px;" onclick="logoutElementAccount()">LOGOUT</button>
+              <button id="matrix-logout-btn" class="gtag-btn" type="button" style="font-size:7px; padding:3px 5px;">LOGOUT</button>
             </div>
           </div>
           <div id="chat-messages">
@@ -74,6 +74,7 @@
           <div class="gtag-input-row">
             <span>&gt;</span>
             <input type="text" id="chat-input" placeholder="TYPE MESSAGE + ENTER..." maxlength="150" autocomplete="off" />
+            <button id="chat-send-btn" class="gtag-btn" type="button">SEND</button>
           </div>
         </div>
       </div>
@@ -110,9 +111,9 @@
   </div>
 
   <!-- Separate Modular Scripts -->
-  <script src="ui-keybinds.js?v=6"></script>
-  <script src="soundboard.js?v=6"></script>
-  <script src="chat.js?v=25"></script>
+  <script src="ui-keybinds.js?v=30"></script>
+  <script src="soundboard.js?v=30"></script>
+  <script src="chat.js?v=30"></script>
 
   <!-- Unity 8-Part Loader -->
   <script>
