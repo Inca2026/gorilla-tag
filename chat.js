@@ -4,12 +4,14 @@ document.addEventListener("DOMContentLoaded", () => {
   const FALLBACK_SERVER = "https://matrix.org";
   const GUEST_BOT_USER = "@meebo:matrix.org";
   const GUEST_BOT_PASS = "ColdLeg6932";
+  const GUEST_IDLE_LIMIT_MS = 10 * 60 * 1000; // 10-minute guest inactivity timeout
 
   const loginBox = document.getElementById("matrix-login-box");
   const chatBox = document.getElementById("matrix-chat-box");
   const statusLabel = document.getElementById("matrix-login-error");
   const loginBtn = document.getElementById("matrix-login-btn");
   const guestBtn = document.getElementById("matrix-guest-btn");
+  const guestNickField = document.getElementById("guest-nick-input");
   const userField = document.getElementById("matrix-user-input");
   const passField = document.getElementById("matrix-pass-input");
   const chatInput = document.getElementById("chat-input");
@@ -22,16 +24,21 @@ document.addEventListener("DOMContentLoaded", () => {
   let backendRandomRoomId = "";
   let activeChannelKey = "general";
 
+  // Persistent custom guest display name saved in localStorage
+  let savedGuestNick = localStorage.getItem("gtag_saved_guest_nick") || "";
+  if (guestNickField && savedGuestNick) guestNickField.value = savedGuestNick;
+
   let guestToken = sessionStorage.getItem("gtag_guest_token") || "";
   let guestBotId = sessionStorage.getItem("gtag_guest_bot_id") || "";
   let guestName = sessionStorage.getItem("gtag_guest_nick") || "";
-  let isGuestMode = Boolean(!accessToken && sessionStorage.getItem("gtag_guest_active") === "1");
+  let isGuestMode = Boolean(!accessToken && sessionStorage.getItem("gtag_guest_active") === "1" && guestToken);
 
   let syncToken = "";
   let isSyncing = false;
   let sidebarRooms = [];
   let toastTimeout = null;
   let flareTimeout = null;
+  let lastActivityTs = Date.now();
 
   window.isMatrixConnected = Boolean(accessToken && userId);
   let totalPlaySeconds = parseInt(localStorage.getItem("gtag_total_playtime") || "0", 10);
@@ -45,11 +52,19 @@ document.addEventListener("DOMContentLoaded", () => {
     return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
   }
 
+  function sanitizeGuestNick(raw) {
+    const cleaned = (raw || "").trim().replace(/[^a-zA-Z0-9_-]/g, "").slice(0, 14);
+    if (!cleaned || cleaned.toLowerCase() === "meebo" || cleaned.toLowerCase() === "system") {
+      return `MONKE_${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+    return cleaned;
+  }
+
   function formatDisplayName(rawId) {
     if (!rawId) return "MONKE";
     let clean = rawId.split(":").at(0);
     if (clean.startsWith("@")) clean = clean.slice(1);
-    if (clean.toLowerCase() === "meebo") return guestName || `MONKE_${Math.floor(1000 + Math.random() * 9000)}`;
+    if (clean.toLowerCase() === "meebo") return guestName || "MONKE_GUEST";
     const isDigits = clean.length > 0 && clean.split("").every(ch => ch >= "0" && ch <= "9");
     return isDigits ? `MONKE_${clean.slice(-4)}` : clean;
   }
@@ -64,7 +79,7 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!lbBox || !listEl || lbBox.classList.contains("gtag-hidden")) return;
 
     const now = Date.now();
-    const myName = userId ? formatDisplayName(userId) : (guestName || "MONKE_GUEST");
+    const myName = userId ? formatDisplayName(userId) : (guestName || savedGuestNick || "MONKE_GUEST");
     const entries = [{ name: myName, seconds: totalPlaySeconds, isSelf: true, isVip: Boolean(userId) }];
 
     onlinePlayers.forEach((info, name) => {
@@ -132,34 +147,28 @@ document.addEventListener("DOMContentLoaded", () => {
     if (rawBody.startsWith("[GUEST:")) {
       const endBracket = rawBody.indexOf("]");
       if (endBracket !== -1) {
-        return {
-          displayUser: rawBody.slice(7, endBracket),
-          cleanText: rawBody.slice(endBracket + 2),
-          isVip: false
-        };
+        return { displayUser: rawBody.slice(7, endBracket), cleanText: rawBody.slice(endBracket + 2), isVip: false };
       }
     }
-    return {
-      displayUser: formatDisplayName(senderId),
-      cleanText: rawBody,
-      isVip: senderId !== guestBotId
-    };
+    return { displayUser: formatDisplayName(senderId), cleanText: rawBody, isVip: senderId !== guestBotId };
   }
 
-  async function startGuestSession(openChatAfter = false) {
+  // Only connects @meebo when user explicitly clicks "CONTINUE AS GUEST"
+  async function startGuestSession() {
     if (accessToken) return;
-    if (!guestName) {
-      guestName = `MONKE_${Math.floor(1000 + Math.random() * 9000)}`;
-      sessionStorage.setItem("gtag_guest_nick", guestName);
-    }
+    const typedNick = guestNickField?.value || savedGuestNick;
+    guestName = sanitizeGuestNick(typedNick);
+    savedGuestNick = guestName;
 
-    if (openChatAfter && guestBtn) {
-      guestBtn.disabled = true;
-      guestBtn.textContent = "CONNECTING...";
-    }
+    localStorage.setItem("gtag_saved_guest_nick", savedGuestNick);
+    if (guestNickField) guestNickField.value = savedGuestNick;
+    sessionStorage.setItem("gtag_guest_nick", guestName);
 
-    if (!guestToken && GUEST_BOT_USER && GUEST_BOT_PASS) {
-      try {
+    if (guestBtn) { guestBtn.disabled = true; guestBtn.textContent = "CONNECTING..."; }
+    setStatus(`CONNECTING AS ${guestName}...`);
+
+    try {
+      if (!guestToken && GUEST_BOT_USER && GUEST_BOT_PASS) {
         const cleanBotUser = GUEST_BOT_USER.replace(/^@/, "").split(":").at(0);
         const res = await fetch(`${FALLBACK_SERVER}/_matrix/client/v3/login`, {
           method: "POST",
@@ -177,27 +186,21 @@ document.addEventListener("DOMContentLoaded", () => {
           sessionStorage.setItem("gtag_guest_token", guestToken);
           sessionStorage.setItem("gtag_guest_bot_id", guestBotId);
         }
-      } catch (_) {}
-    }
+      }
 
-    if (guestBtn) {
-      guestBtn.disabled = false;
-      guestBtn.textContent = "CONTINUE AS GUEST";
-    }
-
-    if (openChatAfter) {
       isGuestMode = true;
+      lastActivityTs = Date.now();
       sessionStorage.setItem("gtag_guest_active", "1");
       window.isMatrixConnected = false;
       if (typeof syncModUI === "function") syncModUI();
       playTerminalSfx?.("send");
       await openStumpRoom(true);
-    } else if (guestToken) {
-      await openStumpRoom(false, true);
+    } finally {
+      if (guestBtn) { guestBtn.disabled = false; guestBtn.textContent = "CONTINUE AS GUEST"; }
     }
   }
-
   async function sendSilentPresence() {
+    if (!accessToken && !isGuestMode) return; // Never ping if sitting on login screen
     const tok = accessToken || guestToken;
     const srv = accessToken ? homeserver : FALLBACK_SERVER;
     if (!tok || !backendRandomRoomId) return;
@@ -216,24 +219,50 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (_) {}
   }
 
-  function sendOfflineBeacon() {
+  function endSessionBeacon(clearGuestStorage = false) {
     const tok = accessToken || guestToken;
     const srv = accessToken ? homeserver : FALLBACK_SERVER;
     const myPublicName = userId ? formatDisplayName(userId) : guestName;
-    if (!tok || !backendRandomRoomId || !myPublicName) return;
 
-    const txnId = `bye_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
-    fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/${txnId}`, {
-      method: "PUT",
-      keepalive: true,
-      headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ msgtype: "m.notice", body: `[OFFLINE|${myPublicName}]` })
-    }).catch(() => {});
+    if (tok && backendRandomRoomId && myPublicName) {
+      const txnId = `bye_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      fetch(`${srv}/_matrix/client/v3/rooms/${encodeURIComponent(backendRandomRoomId)}/send/m.room.message/${txnId}`, {
+        method: "PUT",
+        keepalive: true,
+        headers: { "Authorization": `Bearer ${tok}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ msgtype: "m.notice", body: `[OFFLINE|${myPublicName}]` })
+      }).catch(() => {});
+    }
+
+    if (isGuestMode && guestToken && guestBotId) {
+      fetch(`${FALLBACK_SERVER}/_matrix/client/v3/presence/${encodeURIComponent(guestBotId)}/status`, {
+        method: "PUT",
+        keepalive: true,
+        headers: { "Authorization": `Bearer ${guestToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ presence: "offline" })
+      }).catch(() => {});
+    }
+
+    if (clearGuestStorage) {
+      ["gtag_guest_nick", "gtag_guest_token", "gtag_guest_bot_id", "gtag_guest_active"].forEach(k => sessionStorage.removeItem(k));
+    }
   }
 
-  window.addEventListener("pagehide", sendOfflineBeacon);
-  window.addEventListener("beforeunload", sendOfflineBeacon);
+  // Track user activity & enforce 10-minute guest inactivity timeout
+  ["keydown", "mousedown", "touchstart"].forEach(evt => {
+    window.addEventListener(evt, () => { lastActivityTs = Date.now(); }, { passive: true });
+  });
+
+  setInterval(() => {
+    if (isGuestMode && Date.now() - lastActivityTs > GUEST_IDLE_LIMIT_MS) {
+      handleLogout("GUEST SESSION TIMED OUT DUE TO INACTIVITY.");
+    }
+  }, 15000);
+
+  window.addEventListener("pagehide", () => endSessionBeacon(isGuestMode));
+  window.addEventListener("beforeunload", () => endSessionBeacon(isGuestMode));
   setInterval(sendSilentPresence, 15000);
+
   function setStatus(msg, isError = false) {
     if (!statusLabel) return;
     statusLabel.style.color = isError ? "#ff4444" : "#33ff33";
@@ -251,7 +280,6 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (_) {}
     return domain.toLowerCase() === "matrix.org" ? FALLBACK_SERVER : `https://${domain}`;
   }
-
   async function handleLogin() {
     const rawUser = userField.value.trim();
     const password = passField.value;
@@ -291,11 +319,10 @@ document.addEventListener("DOMContentLoaded", () => {
       if (!loginRes.ok || !loginData.access_token) throw new Error(loginData.error || `Login rejected (${loginRes.status})`);
 
       if (guestName) {
-        sendOfflineBeacon();
+        endSessionBeacon(true);
         onlinePlayers.delete(guestName);
       }
       guestName = ""; guestToken = ""; guestBotId = ""; isGuestMode = false;
-      ["gtag_guest_nick", "gtag_guest_token", "gtag_guest_bot_id", "gtag_guest_active"].forEach(k => sessionStorage.removeItem(k));
 
       accessToken = loginData.access_token;
       userId = loginData.user_id;
@@ -385,12 +412,10 @@ document.addEventListener("DOMContentLoaded", () => {
     });
     return lookupData.room_id;
   }
-  async function openStumpRoom(asGuest = false, silentBackground = false) {
-    if (!silentBackground) {
-      loginBox.classList.add("gtag-hidden");
-      chatBox.classList.remove("gtag-hidden");
-      msgBox.innerHTML = "";
-    }
+  async function openStumpRoom(asGuest = false) {
+    loginBox.classList.add("gtag-hidden");
+    chatBox.classList.remove("gtag-hidden");
+    msgBox.innerHTML = "";
     sidebarRooms = [];
     const tok = accessToken || guestToken;
 
@@ -402,15 +427,13 @@ document.addEventListener("DOMContentLoaded", () => {
       sidebarRooms.push({ name: "general", alias: GENERAL_ALIAS, id: null });
     }
 
-    if (!silentBackground) {
-      renderRoomSidebar();
-      if (sidebarRooms.at(0)) await selectStumpChannel(sidebarRooms.at(0));
-      if (asGuest) {
-        addChatLine("SYSTEM", `PUBLIC GUEST ID: ${guestName}`);
-        addChatLine("SYSTEM", "SIGN IN WITH ELEMENT TO UNLOCK [★ VIP] & CUSTOM ROOMS!");
-      } else {
-        addChatLine("SYSTEM", `LOGGED IN AS ${userId} [★ VIP TAB UNLOCKED]`, true);
-      }
+    renderRoomSidebar();
+    if (sidebarRooms.at(0)) await selectStumpChannel(sidebarRooms.at(0));
+    if (asGuest) {
+      addChatLine("SYSTEM", `GUEST DISPLAY NAME: ${guestName} (SAVED)`);
+      addChatLine("SYSTEM", "SIGN IN WITH ELEMENT TO UNLOCK [★ VIP] & CUSTOM ROOMS!");
+    } else {
+      addChatLine("SYSTEM", `LOGGED IN AS ${userId} [★ VIP TAB UNLOCKED]`, true);
     }
 
     if (tok && !isSyncing) { isSyncing = true; startSyncLoop(); }
@@ -418,14 +441,15 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   async function startSyncLoop() {
-    while ((accessToken || guestToken) && isSyncing) {
+    while ((accessToken || isGuestMode) && isSyncing) {
       const tok = accessToken || guestToken;
       const srv = accessToken ? homeserver : FALLBACK_SERVER;
+      if (!tok) break;
       try {
         const query = syncToken ? `?timeout=15000&since=${encodeURIComponent(syncToken)}` : "?timeout=15000";
         const res = await fetch(`${srv}/_matrix/client/v3/sync${query}`, { headers: { "Authorization": `Bearer ${tok}` } });
         if (!res.ok) {
-          if (res.status === 401 && accessToken) { handleLogout(); return setStatus("SESSION EXPIRED.", true); }
+          if (res.status === 401 && accessToken) { handleLogout("SESSION EXPIRED."); return; }
           await new Promise(r => setTimeout(r, 3000));
           continue;
         }
@@ -437,7 +461,6 @@ document.addEventListener("DOMContentLoaded", () => {
         const joinedRooms = data.rooms?.join || {};
         if (backendRandomRoomId && joinedRooms[backendRandomRoomId]) {
           for (const ev of (joinedRooms[backendRandomRoomId].timeline?.events || [])) {
-            // Skip historical events from before this session loaded so closed tabs never appear
             if (isInitialSync || !ev.content?.body) continue;
             const body = ev.content.body;
 
@@ -534,26 +557,36 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (err) { playTerminalSfx?.("error"); addChatLine("SYSTEM", `JOIN FAILED: ${err.message}`); }
   });
 
-  function handleLogout() {
-    sendOfflineBeacon();
-    accessToken = ""; userId = ""; syncToken = ""; isSyncing = false; isGuestMode = false; guestName = ""; window.isMatrixConnected = false;
+  function handleLogout(customMsg = "SIGNED OUT.") {
+    endSessionBeacon(true);
+    accessToken = ""; userId = ""; guestToken = ""; guestBotId = "";
+    syncToken = ""; isSyncing = false; isGuestMode = false; guestName = "";
+    window.isMatrixConnected = false;
+
     ["gtag_mx_token", "gtag_mx_user", "gtag_mx_server", "gtag_mx_custom_room"].forEach(k => localStorage.removeItem(k));
-    ["gtag_guest_nick", "gtag_guest_active"].forEach(k => sessionStorage.removeItem(k));
+    if (guestNickField && savedGuestNick) guestNickField.value = savedGuestNick;
     if (typeof syncModUI === "function") syncModUI();
-    chatBox.classList.add("gtag-hidden"); loginBox.classList.remove("gtag-hidden");
-    playTerminalSfx?.("close"); setStatus("SIGNED OUT."); startGuestSession(false);
+
+    chatBox.classList.add("gtag-hidden");
+    loginBox.classList.remove("gtag-hidden");
+    playTerminalSfx?.("close");
+    setStatus(customMsg);
   }
+
+  guestNickField?.addEventListener("input", () => {
+    savedGuestNick = guestNickField.value.trim().slice(0, 14);
+    localStorage.setItem("gtag_saved_guest_nick", savedGuestNick);
+  });
 
   window.loginElementAccount = handleLogin;
   window.logoutElementAccount = handleLogout;
   window.sendStumpChatInput = () => { const msg = chatInput.value.trim(); if (msg) { chatInput.value = ""; sendMessage(msg); } };
   if (loginBtn) loginBtn.onclick = e => { e.preventDefault(); handleLogin(); };
-  if (guestBtn) guestBtn.onclick = e => { e.preventDefault(); startGuestSession(true); };
-  document.getElementById("matrix-logout-btn")?.addEventListener("click", e => { e.preventDefault(); handleLogout(); });
+  if (guestBtn) guestBtn.onclick = e => { e.preventDefault(); startGuestSession(); };
+  document.getElementById("matrix-logout-btn")?.addEventListener("click", e => { e.preventDefault(); handleLogout("SIGNED OUT."); });
   document.getElementById("chat-send-btn")?.addEventListener("click", e => { e.preventDefault(); window.sendStumpChatInput(); chatInput.focus(); });
 
   setStatus("READY TO SIGN IN OR CONTINUE AS GUEST.");
   if (accessToken && userId) openStumpRoom(false);
   else if (isGuestMode) openStumpRoom(true);
-  else startGuestSession(false);
 });
