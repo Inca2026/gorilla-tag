@@ -161,7 +161,7 @@ function focusActiveChatField() {
 }
 
 function switchTab(tabName) {
-  ['chat', 'sounds', 'mods', 'vip', 'settings', 'about'].forEach(t => {
+  ['chat', 'sounds', 'mods', 'vip', 'hack', 'settings', 'about'].forEach(t => {
     document.getElementById(`tab-${t}`)?.classList.toggle('gtag-hidden', tabName !== t);
     document.getElementById(`btn-tab-${t}`)?.classList.toggle('active', tabName === t);
   });
@@ -169,6 +169,10 @@ function switchTab(tabName) {
   if (typeof playTerminalSfx === 'function') playTerminalSfx('tab');
   if (tabName === 'chat') focusActiveChatField();
   if (tabName === 'vip') setTimeout(() => document.getElementById('vip-flare-input')?.focus(), 15);
+  if (tabName === 'hack') {
+    window.renderHackTargetList?.();
+    setTimeout(() => document.getElementById('hack-code-input')?.focus(), 15);
+  }
 }
 
 window.addEventListener('keydown', (e) => {
@@ -200,6 +204,11 @@ window.addEventListener('keydown', (e) => {
       if (document.activeElement?.id === 'vip-flare-input') {
         e.preventDefault(); e.stopImmediatePropagation();
         window.sendVipBroadcastFlare?.();
+        return;
+      }
+      if (document.activeElement?.id === 'hack-code-input') {
+        e.preventDefault(); e.stopImmediatePropagation();
+        window.unlockHackTerminal?.();
         return;
       }
       if (document.activeElement?.id === 'matrix-pass-input' || document.activeElement?.id === 'matrix-user-input') {
