@@ -7,7 +7,14 @@
   <link rel="preconnect" href="https://googleapis.com" />
   <link href="https://googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css?v=8" />
-<script src="3d-mods.js?v=4"></script>
+<script>
+  window.addEventListener('error', function(e) {
+    alert('SCRIPT ERROR: ' + e.message + '\nFile: ' + e.filename + '\nLine: ' + e.lineno);
+  });
+</script>
+<script src="3d-mods.js?v=5"></script>
+
+  <script src="3d-mods.js?v=4"></script>
 </head>
 <body>
   <div id="unity-container">
