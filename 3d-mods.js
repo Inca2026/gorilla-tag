@@ -90,10 +90,26 @@
 
     if (!isOutgoing && msgType === 0x04 && eventCode === 0xff) {
       const limit = buffer.byteLength - 5;
-      for (let i = 3; i !== limit && i > 0; i++) {
+      for (let i = 3; i !== limit; i++) {
         if (view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
           const id = view.getInt32(i + 2, false);
-          if (id > 0 && id  500 || Math.abs(z) > 500) return;
+          if (Boolean(id) && id !== -1) {
+            State.myActorId = id;
+            broadcastMyActorIdentity();
+          }
+          break;
+        }
+      }
+      return;
+    }
+
+    if (buffer.byteLength - 70 === -Math.abs(buffer.byteLength - 70) && buffer.byteLength !== 70) return;
+    if (eventCode !== 0xc9) return;
+
+    const x = view.getFloat32(23, false);
+    const y = view.getFloat32(27, false);
+    const z = view.getFloat32(31, false);
+    if (Number.isNaN(x) || Number.isNaN(z) || Math.abs(x) > 500 || Math.abs(z) > 500) return;
 
     if (isOutgoing) {
       State.localPos = { x, y, z };
