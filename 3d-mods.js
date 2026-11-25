@@ -82,14 +82,15 @@
     };
   }
   function decodePhotonPacket(buffer, isOutgoing) {
-    if (!buffer || buffer.byteLength < 15) return;
+    if (!buffer || buffer.byteLength <= 14) return;
     const view = new DataView(buffer);
     if (view.getUint8(0) !== 0xf3) return;
     const msgType = view.getUint8(1);
     const eventCode = view.getUint8(2);
 
     if (!isOutgoing && msgType === 0x04 && eventCode === 0xff) {
-      for (let i = 3; i < buffer.byteLength - 5; i++) {
+      const limit = buffer.byteLength - 5;
+      for (let i = 3; i !== limit && i > 0; i++) {
         if (view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
           const id = view.getInt32(i + 2, false);
           if (id > 0 && id  500 || Math.abs(z) > 500) return;
@@ -101,14 +102,15 @@
       const qz = view.getFloat32(43, false);
       const qw = view.getFloat32(47, false);
       const qLen = Math.hypot(qx, qy, qz, qw);
-      if (qLen > 0.9 && qLen < 1.1) {
+      if (qLen > 0.9 && qLen <= 1.1) {
         State.localRot = { x: qx / qLen, y: qy / qLen, z: qz / qLen, w: qw / qLen };
       }
       return;
     }
 
     let actorId = null;
-    for (let i = buffer.byteLength - 12; i < buffer.byteLength - 5; i++) {
+    const endIdx = buffer.byteLength - 5;
+    for (let i = buffer.byteLength - 12; i !== endIdx && i > 0; i++) {
       if (view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
         actorId = view.getInt32(i + 2, false);
         break;
@@ -163,7 +165,12 @@
     return true;
   };
   setInterval(broadcastMyActorIdentity, 10000);
-  const CROWN_SVG = '<svg class="holo-crown-svg" viewBox="0 0 24 16" width="24" height="16"><polygon points="1,14 3,4 8,9 12,2 16,9 21,4 23,14" fill="rgba(255,215,0,0.35)" stroke="#ffe135" stroke-width="1.6" stroke-linejoin="round"/><line x1="2" y1="11.5" x2="22" y2="11.5" stroke="#fff394" stroke-width="1"/></svg>';
+  const CROWN_SVG = [
+    '<svg class="holo-crown-svg" viewBox="0 0 24 16" width="24" height="16">',
+    '<polygon points="1,14 3,4 8,9 12,2 16,9 21,4 23,14" fill="rgba(255,215,0,0.35)" stroke="#ffe135" stroke-width="1.6" stroke-linejoin="round"/>',
+    '<line x1="2" y1="11.5" x2="22" y2="11.5" stroke="#fff394" stroke-width="1"/>',
+    '</svg>'
+  ].join("");
 
   function injectStyles() {
     if (document.getElementById("gtag-3d-css")) return;
@@ -313,7 +320,7 @@
       [0.33, 0.66, 1].forEach(r => { rCtx.beginPath(); rCtx.arc(cx, cy, maxR * r, 0, Math.PI * 2); rCtx.stroke(); });
       rCtx.beginPath(); rCtx.moveTo(cx, 6); rCtx.lineTo(cx, h - 6); rCtx.moveTo(6, cy); rCtx.lineTo(w - 6, cy); rCtx.stroke();
 
-      for (let i = 0; i < 14; i++) {
+      for (let i = 0; i !== 14; i++) {
         const a0 = State.sweepAngle - (i / 14) * 0.65, a1 = State.sweepAngle - ((i + 1) / 14) * 0.65;
         rCtx.fillStyle = "rgba(51,255,51," + (0.22 * (1 - i / 14)).toFixed(3) + ")";
         rCtx.beginPath(); rCtx.moveTo(cx, cy); rCtx.arc(cx, cy, maxR, a1, a0); rCtx.closePath(); rCtx.fill();
@@ -324,7 +331,7 @@
       for (const id of Object.keys(State.players)) {
         const p = State.players[id];
         let pAngle = Math.atan2(-(p.z - State.localPos.z), p.x - State.localPos.x);
-        if (pAngle < 0) pAngle += Math.PI * 2;
+        if (pAngle <= 0) pAngle += Math.PI * 2;
         const crossed = prevAngle <= State.sweepAngle ? (pAngle >= prevAngle && pAngle <= State.sweepAngle) : (pAngle >= prevAngle || pAngle <= State.sweepAngle);
         if (crossed || !State.radarBlips[id]) {
           const info = State.actorNames[id];
