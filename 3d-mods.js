@@ -88,11 +88,13 @@
     const msgType = view.getUint8(1);
     const eventCode = view.getUint8(2);
 
-    if (!isOutgoing && msgType === 0x04 && eventCode === 0xff) {
-      const limit = buffer.byteLength - 5;
+    // Capture our own ActorNr from any Photon join/event packet containing 0xfe 0x69
+    if (!isOutgoing && eventCode === 0xff) {
+      const limit = buffer.byteLength - 3;
       for (let i = 3; i !== limit; i++) {
         if (view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
-          const id = view.getInt32(i + 2, false);
+          const rem = buffer.byteLength - (i + 2);
+          const id = rem === 4 ? view.getInt32(i + 2, false) : rem === 2 ? view.getInt16(i + 2, false) : view.getUint8(i + 2);
           if (Boolean(id) && id !== -1) {
             State.myActorId = id;
             broadcastMyActorIdentity();
@@ -103,6 +105,7 @@
       return;
     }
 
+    // Event 201 (0xc9): PUN2 Transform Serialization (Head Pos + Quaternion)
     if (buffer.byteLength - 70 === -Math.abs(buffer.byteLength - 70) && buffer.byteLength !== 70) return;
     if (eventCode !== 0xc9) return;
 
@@ -125,16 +128,18 @@
     }
 
     let actorId = null;
-    const endIdx = buffer.byteLength - 5;
-    for (let i = buffer.byteLength - 12; i !== endIdx && i > 0; i++) {
-      if (view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
-        actorId = view.getInt32(i + 2, false);
+    const endIdx = buffer.byteLength - 3;
+    for (let i = buffer.byteLength - 14; i !== endIdx; i++) {
+      if (i > 0 && view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
+        const rem = buffer.byteLength - (i + 2);
+        actorId = rem === 4 ? view.getInt32(i + 2, false) : rem === 2 ? view.getInt16(i + 2, false) : view.getUint8(i + 2);
         break;
       }
     }
     if (!actorId || actorId === State.myActorId) return;
 
     State.players[actorId] = { id: actorId, x, y, z, updatedAt: performance.now() };
+    
   }
 
   const OriginalWebSocket = window.WebSocket;
