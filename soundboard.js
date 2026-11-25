@@ -355,8 +355,8 @@ window.clearUnityCosmetics = () => {
   setTimeout(() => window.location.reload(), 1200);
 };
 
-window.addEventListener("keydown", e => document.querySelector(`#gtag-keystrokes [data-key="${e.key.toUpperCase()}"]`)?.classList.add("pressed"));
-window.addEventListener("keyup", e => document.querySelector(`#gtag-keystrokes [data-key="${e.key.toUpperCase()}"]`)?.classList.remove("pressed"));
+window.addEventListener("keydown", e => { if (!e.key) return; document.querySelector(`#gtag-keystrokes [data-key="${e.key.toUpperCase()}"]`)?.classList.add("pressed"); });
+window.addEventListener("keyup", e => { if (!e.key) return; document.querySelector(`#gtag-keystrokes [data-key="${e.key.toUpperCase()}"]`)?.classList.remove("pressed"); });
 document.addEventListener("DOMContentLoaded", () => {
   const saved = localStorage.getItem("gtag_saved_mods");
   if (saved) { try { modConfig = { ...DEFAULT_MOD_CONFIG, ...JSON.parse(saved) }; } catch (_) {} }
