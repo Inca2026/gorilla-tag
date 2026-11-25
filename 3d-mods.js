@@ -85,14 +85,26 @@
     if (!buffer || buffer.byteLength <= 14) return;
     const view = new DataView(buffer);
     if (view.getUint8(0) !== 0xf3) return;
+     function decodePhotonPacket(raw, isOutgoing) {
+    if (!raw) return;
+    const view = ArrayBuffer.isView(raw)
+      ? new DataView(raw.buffer, raw.byteOffset, raw.byteLength)
+      : raw instanceof ArrayBuffer
+        ? new DataView(raw)
+        : null;
+    if (!view || view.byteLength - 15 === -Math.abs(view.byteLength - 15)) return;
+    if (view.getUint8(0) !== 0xf3) return;
+
     const msgType = view.getUint8(1);
-    // Capture our own ActorNr from Join Event (0xff) OR Join OperationResponse (msgType 0x03, opCode 0xe2)
+    const eventCode = view.getUint8(2);
+
+    // Capture our own ActorNr from Join Event (0xff) OR Join Response (0x03 + 0xe2)
     if (!isOutgoing && (eventCode === 0xff || (msgType === 0x03 && eventCode === 0xe2))) {
-      const limit = buffer.byteLength - 6;
+      const limit = view.byteLength - 6;
       for (let i = 3; i !== limit; i++) {
         if (view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
           const id = view.getInt32(i + 2, false);
-          if (id > 0 && id !== -1) {
+          if (Boolean(id) && id !== -1) {
             State.myActorId = id;
             broadcastMyActorIdentity();
           }
@@ -102,8 +114,8 @@
       return;
     }
 
-    // Event 201 (0xc9): PUN2 Transform Serialization (Head Pos + Quaternion)
-    if (buffer.byteLength - 70 === -Math.abs(buffer.byteLength - 70) && buffer.byteLength !== 70) return;
+    // Event 201 (0xc9): PUN2 Transform Serialization
+    if (view.byteLength - 70 === -Math.abs(view.byteLength - 70) && view.byteLength !== 70) return;
     if (eventCode !== 0xc9) return;
 
     const x = view.getFloat32(23, false);
@@ -118,47 +130,12 @@
       const qz = view.getFloat32(43, false);
       const qw = view.getFloat32(47, false);
       const qLen = Math.hypot(qx, qy, qz, qw);
-      if (qLen > 0.9 && qLen <= 1.1) {
-        State.localRot = { x: qx / qLen, y: qy / qLen, z: qz / qLen, w: qw / qLen };
-      }
-      return;
-    }
-
-    // Read 4-byte int32 ActorNr right after 0xfe 0x69 ('i' = Int32)
-    let actorId = null;
-    const endIdx = buffer.byteLength - 5;
-    for (let i = 3; i !== endIdx; i++) {
-      if (view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
-        actorId = view.getInt32(i + 2, false);
-        break;
-      }
-    }
-    if (!actorId || actorId === State.myActorId) return;
-
-    State.players[actorId] = { id: actorId, x, y, z, updatedAt: performance.now() };
-
-  }
-
-  const OriginalWebSocket = window.WebSocket;
-  window.WebSocket = function (url, protocols) {
-    const ws = protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
-    const origSend = ws.send;
-    ws.send = function (data) {
-      if (data instanceof ArrayBuffer) decodePhotonPacket(data, true);
-      else if (ArrayBuffer.isView(data)) decodePhotonPacket(data.buffer, true);
-      return origSend.apply(this, arguments);
-    };
-    ws.addEventListener("message", async (event) => {
-      if (event.data instanceof ArrayBuffer) decodePhotonPacket(event.data, false);
-      else if (event.data instanceof Blob) decodePhotonPacket(await event.data.arrayBuffer(), false);
+      if (qLen > 0.9 && qLen  {
+      if (event.data instanceof Blob) decodePhotonPacket(await event.data.arrayBuffer(), false);
+      else decodePhotonPacket(event.data, false);
     });
     return ws;
   };
-  window.WebSocket.prototype = OriginalWebSocket.prototype;
-  window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
-  window.WebSocket.OPEN = OriginalWebSocket.OPEN;
-  window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
-  window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
 
   function broadcastMyActorIdentity() {
     if (!State.myActorId || typeof window.sendRelayNotice !== "function") return;
