@@ -94,14 +94,18 @@
   }
   // 4. Zero-Delay Photon WebSocket Hook (0ms Instant Packet Decoding)
   function decodePhotonPacket(buffer, isOutgoing) {
-    const bytes = new Uint8Array(buffer);
-    if (bytes.length < 15 || bytes !== 0xf3) return;
+    if (!buffer || buffer.byteLength < 15) return;
     const view = new DataView(buffer);
 
+    // Byte 0 must be Photon magic byte 0xf3
+    if (view.getUint8(0) !== 0xf3) return;
+    const msgType = view.getUint8(1);
+    const eventCode = view.getUint8(2);
+
     // Event 255 (0xff): Room Join -> captures our own ActorNr
-    if (!isOutgoing && bytes === 0x04 && bytes === 0xff) {
-      for (let i = 3; i < bytes.length - 5; i++) {
-        if (bytes[i] === 0xfe && bytes[i + 1] === 0x69) {
+    if (!isOutgoing && msgType === 0x04 && eventCode === 0xff) {
+      for (let i = 3; i < buffer.byteLength - 5; i++) {
+        if (view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
           const id = view.getInt32(i + 2, false);
           if (id > 0 && id  500 || Math.abs(z) > 500) return;
 
@@ -119,8 +123,8 @@
     }
 
     let actorId = null;
-    for (let i = bytes.length - 12; i < bytes.length - 5; i++) {
-      if (bytes[i] === 0xfe && bytes[i + 1] === 0x69) {
+    for (let i = buffer.byteLength - 12; i < buffer.byteLength - 5; i++) {
+      if (view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
         actorId = view.getInt32(i + 2, false);
         break;
       }
@@ -444,6 +448,12 @@
     requestAnimationFrame(renderFrame);
   }
 
-  function boot3DMods() { injectStyles(); injectMenuControls(); startRenderLoop(); enforceMandatoryLoginGate(); }
+  function boot3DMods() {
+    injectStyles();
+    injectMenuControls();
+    setTimeout(injectMenuControls, 1000);
+    startRenderLoop();
+    enforceMandatoryLoginGate();
+  }
   document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", boot3DMods) : boot3DMods();
 })();
