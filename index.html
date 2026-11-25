@@ -7,9 +7,8 @@
   <link rel="preconnect" href="https://googleapis.com" />
   <link href="https://googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css?v=8" />
-  <script>
+<script>
   (function () {
-    // 1. Create a built-in floating debug box (no external links needed)
     let logBox = null;
     window.addEventListener('DOMContentLoaded', function () {
       const btn = document.createElement('button');
@@ -17,7 +16,7 @@
       btn.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:999999;background:#0f0;color:#000;font-family:monospace;font-weight:bold;padding:6px 10px;border:none;border-radius:4px;cursor:pointer;';
 
       logBox = document.createElement('div');
-      logBox.style.cssText = 'display:none;position:fixed;bottom:45px;right:10px;width:360px;height:220px;z-index:999999;background:rgba(0,0,0,0.9);color:#0f0;font-family:monospace;font-size:11px;padding:8px;overflow-y:auto;border:1px solid #0f0;border-radius:4px;white-space:pre-wrap;word-break:break-all;';
+      logBox.style.cssText = 'display:none;position:fixed;bottom:45px;right:10px;width:400px;height:240px;z-index:999999;background:rgba(0,0,0,0.92);color:#0f0;font-family:monospace;font-size:11px;padding:8px;overflow-y:auto;border:1px solid #0f0;border-radius:4px;white-space:pre-wrap;word-break:break-all;';
 
       btn.onclick = () => {
         logBox.style.display = logBox.style.display === 'none' ? 'block' : 'none';
@@ -34,29 +33,32 @@
       line.style.padding = '3px 0';
       line.textContent = msg;
       logBox.appendChild(line);
-      if (logBox.children.length > 30) logBox.removeChild(logBox.firstChild);
+      if (logBox.children.length > 35) logBox.removeChild(logBox.firstChild);
       logBox.scrollTop = logBox.scrollHeight;
     }
 
-    // 2. Parse binary WebSocket packets for XYZ floats
-    function parseBinary(buffer) {
+    function parsePhotonPacket(buffer) {
       const bytes = new Uint8Array(buffer);
-      const hex = Array.from(bytes.slice(0, 24))
+      const hex = Array.from(bytes)
         .map((b) => b.toString(16).padStart(2, '0'))
         .join(' ');
 
+      // Photon Binary Protocol uses Big-Endian (false) for 32-bit floats
       const floats = [];
       const view = new DataView(buffer);
-      for (let i = 0; i <= buffer.byteLength - 4; i += 4) {
-        const val = view.getFloat32(i, true);
-        if (!Number.isNaN(val) && Math.abs(val) > 0.01 && Math.abs(val) < 500) {
-          floats.push(Number(val.toFixed(2)));
+      for (let i = 0; i <= buffer.byteLength - 4; i++) {
+        const val = view.getFloat32(i, false);
+        // Filter for realistic Gorilla Tag map coordinates (-150 to 150)
+        if (!Number.isNaN(val) && Math.abs(val) > 0.05 && Math.abs(val) < 150) {
+          // Ensure it's a clean decimal, not garbage bytes interpreted as a float
+          if (Math.abs(val * 100 - Math.round(val * 100)) < 0.05 || Number.isFinite(val)) {
+            floats.push(`@${i}:${val.toFixed(2)}`);
+          }
         }
       }
       return { size: buffer.byteLength, hex, floats };
     }
 
-    // 3. Hook WebSocket before Unity loads
     let lastLogTime = 0;
     const OriginalWebSocket = window.WebSocket;
     window.WebSocket = function (url, protocols) {
@@ -67,19 +69,23 @@
       setTimeout(() => screenLog('[CONNECTED] ' + url), 500);
 
       ws.addEventListener('message', async (event) => {
+        const buffer = event.data instanceof Blob
+          ? await event.data.arrayBuffer()
+          : event.data instanceof ArrayBuffer
+            ? event.data
+            : null;
+
+        if (!buffer) return;
+
+        // Skip tiny ping/heartbeat packets (under 25 bytes) so real movement packets show up
+        if (buffer.byteLength < 25) return;
+
         const now = Date.now();
-        if (now - lastLogTime < 1500) return;
+        if (now - lastLogTime < 1200) return;
         lastLogTime = now;
 
-        if (typeof event.data === 'string') {
-          screenLog('[TEXT] ' + event.data.slice(0, 120));
-        } else if (event.data instanceof ArrayBuffer) {
-          const p = parseBinary(event.data);
-          screenLog(`[BIN ${p.size}B] Coords: [${p.floats.join(', ')}]`);
-        } else if (event.data instanceof Blob) {
-          const p = parseBinary(await event.data.arrayBuffer());
-          screenLog(`[BLOB ${p.size}B] Coords: [${p.floats.join(', ')}]`);
-        }
+        const p = parsePhotonPacket(buffer);
+        screenLog(`[${p.size}B] Floats: [${p.floats.slice(0, 9).join(', ')}]\nHEX: ${p.hex.slice(0, 90)}`);
       });
 
       return ws;
