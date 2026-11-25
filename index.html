@@ -7,37 +7,48 @@
   <link rel="preconnect" href="https://googleapis.com" />
   <link href="https://googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="style.css?v=8" />
-  <script src="https://jsdelivr.net"></script>
-<script>
+  <script>
   (function () {
-    // 1. Initialize on-screen debug console
-    eruda.init();
+    // 1. Create a built-in floating debug box (no external links needed)
+    let logBox = null;
+    window.addEventListener('DOMContentLoaded', function () {
+      const btn = document.createElement('button');
+      btn.textContent = 'LOGS';
+      btn.style.cssText = 'position:fixed;bottom:10px;right:10px;z-index:999999;background:#0f0;color:#000;font-family:monospace;font-weight:bold;padding:6px 10px;border:none;border-radius:4px;cursor:pointer;';
 
-    // Storage for easy inspection in the console
-    window.gtagSniffer = {
-      serverUrl: null,
-      packetCount: 0,
-      lastTextPacket: null,
-      lastBinaryHex: null,
-      lastFloats: null
-    };
+      logBox = document.createElement('div');
+      logBox.style.cssText = 'display:none;position:fixed;bottom:45px;right:10px;width:360px;height:220px;z-index:999999;background:rgba(0,0,0,0.9);color:#0f0;font-family:monospace;font-size:11px;padding:8px;overflow-y:auto;border:1px solid #0f0;border-radius:4px;white-space:pre-wrap;word-break:break-all;';
 
-    let lastLogTime = 0;
-    const LOG_INTERVAL_MS = 1500; // Logs once every 1.5 seconds so the game stays smooth
+      btn.onclick = () => {
+        logBox.style.display = logBox.style.display === 'none' ? 'block' : 'none';
+      };
 
-    // Helper to convert raw binary into readable Hex and 32-bit Floats (XYZ coordinates)
+      document.body.appendChild(btn);
+      document.body.appendChild(logBox);
+    });
+
+    function screenLog(msg) {
+      if (!logBox) return;
+      const line = document.createElement('div');
+      line.style.borderBottom = '1px solid #222';
+      line.style.padding = '3px 0';
+      line.textContent = msg;
+      logBox.appendChild(line);
+      if (logBox.children.length > 30) logBox.removeChild(logBox.firstChild);
+      logBox.scrollTop = logBox.scrollHeight;
+    }
+
+    // 2. Parse binary WebSocket packets for XYZ floats
     function parseBinary(buffer) {
       const bytes = new Uint8Array(buffer);
-      const hex = Array.from(bytes.slice(0, 40))
+      const hex = Array.from(bytes.slice(0, 24))
         .map((b) => b.toString(16).padStart(2, '0'))
         .join(' ');
 
-      // Unity/Photon almost always sends X, Y, Z positions as 32-bit floats
       const floats = [];
       const view = new DataView(buffer);
       for (let i = 0; i <= buffer.byteLength - 4; i += 4) {
-        const val = view.getFloat32(i, true); // little-endian
-        // Filter for realistic 3D map coordinates (-500 to 500, avoiding tiny/NaN numbers)
+        const val = view.getFloat32(i, true);
         if (!Number.isNaN(val) && Math.abs(val) > 0.01 && Math.abs(val) < 500) {
           floats.push(Number(val.toFixed(2)));
         }
@@ -45,57 +56,35 @@
       return { size: buffer.byteLength, hex, floats };
     }
 
-    // 2. Hook into WebSocket before Unity loads
+    // 3. Hook WebSocket before Unity loads
+    let lastLogTime = 0;
     const OriginalWebSocket = window.WebSocket;
     window.WebSocket = function (url, protocols) {
       const ws = protocols
         ? new OriginalWebSocket(url, protocols)
         : new OriginalWebSocket(url);
 
-      window.gtagSniffer.serverUrl = url;
-      console.log('%c[GTAG Sniffer] Connected to:', 'color: #00ff88; font-weight: bold;', url);
+      setTimeout(() => screenLog('[CONNECTED] ' + url), 500);
 
       ws.addEventListener('message', async (event) => {
-        window.gtagSniffer.packetCount++;
         const now = Date.now();
-        const shouldLog = now - lastLogTime > LOG_INTERVAL_MS;
+        if (now - lastLogTime < 1500) return;
+        lastLogTime = now;
 
         if (typeof event.data === 'string') {
-          window.gtagSniffer.lastTextPacket = event.data;
-          if (shouldLog) {
-            lastLogTime = now;
-            console.log('[Packet - TEXT]:', event.data);
-          }
+          screenLog('[TEXT] ' + event.data.slice(0, 120));
         } else if (event.data instanceof ArrayBuffer) {
-          const parsed = parseBinary(event.data);
-          window.gtagSniffer.lastBinaryHex = parsed.hex;
-          window.gtagSniffer.lastFloats = parsed.floats;
-          if (shouldLog) {
-            lastLogTime = now;
-            console.log(`[Packet - ArrayBuffer (${parsed.size}B)]`, {
-              hexPreview: parsed.hex,
-              possibleCoords: parsed.floats
-            });
-          }
+          const p = parseBinary(event.data);
+          screenLog(`[BIN ${p.size}B] Coords: [${p.floats.join(', ')}]`);
         } else if (event.data instanceof Blob) {
-          const buffer = await event.data.arrayBuffer();
-          const parsed = parseBinary(buffer);
-          window.gtagSniffer.lastBinaryHex = parsed.hex;
-          window.gtagSniffer.lastFloats = parsed.floats;
-          if (shouldLog) {
-            lastLogTime = now;
-            console.log(`[Packet - Blob (${parsed.size}B)]`, {
-              hexPreview: parsed.hex,
-              possibleCoords: parsed.floats
-            });
-          }
+          const p = parseBinary(await event.data.arrayBuffer());
+          screenLog(`[BLOB ${p.size}B] Coords: [${p.floats.join(', ')}]`);
         }
       });
 
       return ws;
     };
 
-    // Preserve WebSocket constants (OPEN, CLOSED, etc.) so Unity doesn't throw errors
     window.WebSocket.prototype = OriginalWebSocket.prototype;
     window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
     window.WebSocket.OPEN = OriginalWebSocket.OPEN;
