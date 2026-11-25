@@ -86,16 +86,13 @@
     const view = new DataView(buffer);
     if (view.getUint8(0) !== 0xf3) return;
     const msgType = view.getUint8(1);
-    const eventCode = view.getUint8(2);
-
-    // Capture our own ActorNr from any Photon join/event packet containing 0xfe 0x69
-    if (!isOutgoing && eventCode === 0xff) {
-      const limit = buffer.byteLength - 3;
+    // Capture our own ActorNr from Join Event (0xff) OR Join OperationResponse (msgType 0x03, opCode 0xe2)
+    if (!isOutgoing && (eventCode === 0xff || (msgType === 0x03 && eventCode === 0xe2))) {
+      const limit = buffer.byteLength - 6;
       for (let i = 3; i !== limit; i++) {
         if (view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
-          const rem = buffer.byteLength - (i + 2);
-          const id = rem === 4 ? view.getInt32(i + 2, false) : rem === 2 ? view.getInt16(i + 2, false) : view.getUint8(i + 2);
-          if (Boolean(id) && id !== -1) {
+          const id = view.getInt32(i + 2, false);
+          if (id > 0 && id !== -1) {
             State.myActorId = id;
             broadcastMyActorIdentity();
           }
@@ -127,19 +124,19 @@
       return;
     }
 
+    // Read 4-byte int32 ActorNr right after 0xfe 0x69 ('i' = Int32)
     let actorId = null;
-    const endIdx = buffer.byteLength - 3;
-    for (let i = buffer.byteLength - 14; i !== endIdx; i++) {
-      if (i > 0 && view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
-        const rem = buffer.byteLength - (i + 2);
-        actorId = rem === 4 ? view.getInt32(i + 2, false) : rem === 2 ? view.getInt16(i + 2, false) : view.getUint8(i + 2);
+    const endIdx = buffer.byteLength - 5;
+    for (let i = 3; i !== endIdx; i++) {
+      if (view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
+        actorId = view.getInt32(i + 2, false);
         break;
       }
     }
     if (!actorId || actorId === State.myActorId) return;
 
     State.players[actorId] = { id: actorId, x, y, z, updatedAt: performance.now() };
-    
+
   }
 
   const OriginalWebSocket = window.WebSocket;
