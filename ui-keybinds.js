@@ -168,6 +168,18 @@
       if (tab) window.switchTab(tab);
       else focusActiveChatField();
     } else {
+      const isSignedIn = Boolean(
+        localStorage.getItem('gtag_mx_token') ||
+        window.isMatrixConnected ||
+        sessionStorage.getItem('gtag_guest_active') === '1'
+      );
+      if (!isSignedIn) {
+        if (typeof triggerModToast === 'function') {
+          triggerModToast('SIGN IN REQUIRED', 'LOG IN WITH ELEMENT OR ENTER A GUEST NAME TO PLAY!');
+        }
+        return;
+      }
+
       listeningForBind = null;
       overlay.classList.add('gtag-hidden');
       if (typeof playTerminalSfx === 'function') playTerminalSfx('close');
