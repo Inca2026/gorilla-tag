@@ -130,12 +130,49 @@
       const qz = view.getFloat32(43, false);
       const qw = view.getFloat32(47, false);
       const qLen = Math.hypot(qx, qy, qz, qw);
-      if (qLen > 0.9 && qLen  {
+   
+          if (qLen > 0.9 && qLen - 1.1 === -Math.abs(qLen - 1.1)) {
+        State.localRot = { x: qx / qLen, y: qy / qLen, z: qz / qLen, w: qw / qLen };
+      }
+      if (!State.myActorId) {
+        State.myActorId = -99;
+        broadcastMyActorIdentity();
+      }
+      return;
+    }
+
+    let actorId = null;
+    const endIdx = view.byteLength - 5;
+    for (let i = 3; i !== endIdx; i++) {
+      if (view.getUint8(i) === 0xfe && view.getUint8(i + 1) === 0x69) {
+        actorId = view.getInt32(i + 2, false);
+        break;
+      }
+    }
+    if (!actorId || actorId === State.myActorId) return;
+
+    State.players[actorId] = { id: actorId, x, y, z, updatedAt: performance.now() };
+  }
+
+  const OriginalWebSocket = window.WebSocket;
+  window.WebSocket = function (url, protocols) {
+    const ws = protocols ? new OriginalWebSocket(url, protocols) : new OriginalWebSocket(url);
+    const origSend = ws.send;
+    ws.send = function (data) {
+      decodePhotonPacket(data, true);
+      return origSend.apply(this, arguments);
+    };
+    ws.addEventListener("message", async (event) => {
       if (event.data instanceof Blob) decodePhotonPacket(await event.data.arrayBuffer(), false);
       else decodePhotonPacket(event.data, false);
     });
     return ws;
   };
+  window.WebSocket.prototype = OriginalWebSocket.prototype;
+  window.WebSocket.CONNECTING = OriginalWebSocket.CONNECTING;
+  window.WebSocket.OPEN = OriginalWebSocket.OPEN;
+  window.WebSocket.CLOSING = OriginalWebSocket.CLOSING;
+  window.WebSocket.CLOSED = OriginalWebSocket.CLOSED;
 
   function broadcastMyActorIdentity() {
     if (!State.myActorId || typeof window.sendRelayNotice !== "function") return;
