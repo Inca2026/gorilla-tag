@@ -51,6 +51,7 @@ document.addEventListener("DOMContentLoaded", () => {
   document.getElementById("tab-about")?.remove();
   document.getElementById("gtag-puppet-banner")?.remove();
   document.getElementById("hack-btn-puppet")?.remove();
+
   function formatPlaytime(sec) {
     const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = sec % 60;
     const pad = (n) => String(n).padStart(2, "0");
@@ -75,7 +76,6 @@ document.addEventListener("DOMContentLoaded", () => {
   }
 
   window.getMyGorillaName = () => userId ? formatDisplayName(userId) : (guestName || savedGuestNick || "MONKE_GUEST");
-
   setInterval(() => {
     totalPlaySeconds += 1;
     if (totalPlaySeconds % 5 === 0) localStorage.setItem("gtag_total_playtime", String(totalPlaySeconds));
@@ -107,6 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
       return `<div class="${cls}"><span>#${idx + 1} ${badge}${entry.name.slice(0, 11)}</span><span>${formatPlaytime(entry.seconds)}</span></div>`;
     }).join("");
   }, 1000);
+
   function showVipFlareBanner(senderName, flareText) {
     const banner = document.getElementById("gtag-vip-flare-banner");
     const senderEl = document.getElementById("vip-flare-sender");
@@ -244,6 +245,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ["gtag_guest_nick", "gtag_guest_token", "gtag_guest_bot_id", "gtag_guest_active"].forEach(k => sessionStorage.removeItem(k));
     }
   }
+
   ["keydown", "mousedown", "touchstart"].forEach(evt => window.addEventListener(evt, () => { lastActivityTs = Date.now(); }, { passive: true }));
   setInterval(() => { if (isGuestMode && Date.now() - lastActivityTs > GUEST_IDLE_LIMIT_MS) handleLogout("GUEST SESSION TIMED OUT."); }, 15000);
   window.addEventListener("pagehide", () => endSessionBeacon(isGuestMode));
@@ -267,7 +269,6 @@ document.addEventListener("DOMContentLoaded", () => {
     } catch (_) {}
     return domain.toLowerCase() === "matrix.org" ? FALLBACK_SERVER : `https://${domain}`;
   }
-
   async function handleLogin() {
     const rawUser = userField.value.trim();
     const password = passField.value;
@@ -356,6 +357,7 @@ document.addEventListener("DOMContentLoaded", () => {
     else msgs.forEach(m => addChatLine(m.from, m.text, false, m.ts));
     chatInput?.focus();
   };
+
   async function selectStumpChannel(channelObj) {
     activeChannelKey = channelObj.name; activeDmPeer = "";
     const label = document.getElementById("matrix-room-label");
@@ -416,7 +418,6 @@ document.addEventListener("DOMContentLoaded", () => {
     if (tok && !isSyncing) { isSyncing = true; startSyncLoop(); }
     await sendSilentPresence();
   }
-
   async function startSyncLoop() {
     while ((accessToken || isGuestMode) && isSyncing) {
       const tok = accessToken || guestToken, srv = accessToken ? homeserver : FALLBACK_SERVER;
@@ -470,6 +471,8 @@ document.addEventListener("DOMContentLoaded", () => {
               }
             } else if (body.startsWith("[BANANA_SET|") || body.startsWith("[WAGER_")) {
               window.handleBananaRelayPacket?.(body);
+            } else if (body.startsWith("[ACTOR_ID|")) {
+              window.handle3DRelayPacket?.(body);
             }
           }
         }
