@@ -201,6 +201,7 @@
       return;
     }
 
+    if (!e.key) return;
     if (e.key.toLowerCase() === keybinds.toggle.toLowerCase()) {
       e.preventDefault(); e.stopImmediatePropagation();
       window.toggleOverlay();
